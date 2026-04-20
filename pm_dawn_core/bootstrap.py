@@ -6,9 +6,11 @@ from .layout import pm_dawn_root, project_profile_path
 
 
 def starter_project_profile() -> str:
+    # TOML requires double-escaping: once for Python string, once for TOML regex
+    # The issue_key_pattern must be a valid regex in the TOML file
     return """[project]
 name = "PM Dawn Project"
-issue_key_pattern = "\\b[A-Z][A-Z0-9]+-\\d+\\b"
+issue_key_pattern = "\\\\b[A-Z][A-Z0-9]+-\\\\d+\\\\b"
 
 [branches]
 allowed_prefixes = ["feature", "fix", "chore"]
