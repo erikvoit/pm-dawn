@@ -1,0 +1,6 @@
+interface:
+  display_name: "Epic Slice Implement"
+  short_description: "Launch and steer opencode for one .pm-dawn slice"
+  default_prompt: "Use $epic-slice-implement to launch implementation of a .pm-dawn slice and track its opencode session."
+policy:
+  allow_implicit_invocation: true

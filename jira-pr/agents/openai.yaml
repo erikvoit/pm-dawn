@@ -1,0 +1,6 @@
+interface:
+  display_name: "Jira PR"
+  short_description: "Generate, verify, open, and sync PR metadata with Jira traceability"
+  default_prompt: "Use $jira-pr to prepare or verify a PR from .pm-dawn artifacts, enforce Jira traceability, and open or patch the PR body when needed."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Slice to Jira"
+  short_description: "Sync reviewed slices back to Jira"
+  default_prompt: "Use $slice-to-jira to sync reviewed .pm-dawn slice planning back into Jira story descriptions."

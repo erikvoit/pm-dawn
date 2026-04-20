@@ -1,0 +1,6 @@
+interface:
+  display_name: "Jira Epic Review"
+  short_description: "Review Jira epic graphs with plan-driven normalization"
+  default_prompt: "Use $jira-epic-review to review a Jira epic, inspect its work graph, compare it with the current repo when needed, build a change plan, and normalize child stories when asked."
+policy:
+  allow_implicit_invocation: true

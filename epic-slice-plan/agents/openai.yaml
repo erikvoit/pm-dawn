@@ -1,0 +1,6 @@
+interface:
+  display_name: "Epic Slice Plan"
+  short_description: "Refine one .pm-dawn slice into an approved plan and execution packets"
+  default_prompt: "Use $epic-slice-plan to refine a .pm-dawn slice handoff into an approved slice plan and small execution-packet artifacts."
+policy:
+  allow_implicit_invocation: true
