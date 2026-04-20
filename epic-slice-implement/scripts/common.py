@@ -7,13 +7,22 @@ import shlex
 import subprocess
 import sys
 import time
-import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from pm_dawn_core.markdown import bullet_values, parse_markdown_sections, single_bullet
+from pm_dawn_core.profile import (
+    load_project_profile as load_core_project_profile,
+    make_default_profile,
+    repo_root,
+)
 
 REQUIRED_HANDOFF_FIELDS = [
     "schema_version",
@@ -34,29 +43,19 @@ REQUIRED_HANDOFF_FIELDS = [
     "source_context",
 ]
 
-DEFAULT_PROJECT_PROFILE: dict = {
-    "project": {
-        "name": "PM Dawn Project",
-        "issue_key_pattern": r"\b[A-Z][A-Z0-9]+-\d+\b",
-    },
-    "branches": {
-        "allowed_prefixes": ["feature", "fix", "chore"],
-        "template": "<type>/<jira-key>-<slug>",
-        "allow_codex_prefix": True,
-    },
-    "validation": {
-        "full_suite_command": "make check",
-    },
-    "agent_harness": {
-        "default": "opencode",
-    },
-    "pi": {
-        "default_model": "qwen/qwen3-coder-next-q6k",
-    },
-    "opencode": {
-        "default_model": "llama/qwen/qwen3-coder-next",
-    },
-}
+DEFAULT_PROJECT_PROFILE: dict = make_default_profile(
+    {
+        "agent_harness": {
+            "default": "opencode",
+        },
+        "pi": {
+            "default_model": "qwen/qwen3-coder-next-q6k",
+        },
+        "opencode": {
+            "default_model": "llama/qwen/qwen3-coder-next",
+        },
+    }
+)
 
 
 def emit_json(payload: object) -> None:
@@ -68,30 +67,8 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def repo_root(path: str | Path = ".") -> Path:
-    return Path(path).resolve()
-
-
-def project_profile_path(root: Path) -> Path:
-    return root / ".pm-dawn" / "project-profile.toml"
-
-
-def merge_profile(base: dict, override: dict) -> dict:
-    merged = dict(base)
-    for key, value in override.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = merge_profile(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
-
-
 def load_project_profile(root: Path) -> dict:
-    path = project_profile_path(root)
-    if not path.exists():
-        return json.loads(json.dumps(DEFAULT_PROJECT_PROFILE))
-    loaded = tomllib.loads(path.read_text(encoding="utf-8"))
-    return merge_profile(json.loads(json.dumps(DEFAULT_PROJECT_PROFILE)), loaded)
+    return load_core_project_profile(root, DEFAULT_PROJECT_PROFILE)
 
 
 def full_suite_command(root: Path) -> str:
@@ -382,9 +359,6 @@ def check_active_harness_model(harness: str, model: str) -> dict:
     return check_active_opencode_model(model)
 
 
-SECTION_RE = re.compile(r"^([A-Za-z][A-Za-z0-9 /_-]+):\s*$")
-
-
 def epic_root_path(root: Path, epic_key: str) -> Path:
     return root / ".pm-dawn" / "epics" / epic_key
 
@@ -442,39 +416,6 @@ def validate_handoff(data: dict) -> None:
     missing = [field for field in REQUIRED_HANDOFF_FIELDS if field not in data]
     if missing:
         raise RuntimeError(f"handoff Markdown missing required fields: {', '.join(missing)}")
-
-
-def parse_markdown_sections(markdown: str) -> tuple[str | None, dict[str, list[str]]]:
-    title: str | None = None
-    sections: dict[str, list[str]] = {}
-    current: str | None = None
-    for raw_line in markdown.splitlines():
-        line = raw_line.rstrip()
-        if line.startswith("# "):
-            title = line[2:].strip()
-            continue
-        match = SECTION_RE.match(line)
-        if match:
-            current = match.group(1)
-            sections[current] = []
-            continue
-        if current is not None:
-            sections[current].append(line)
-    return title, sections
-
-
-def bullet_values(lines: list[str]) -> list[str]:
-    values: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("- "):
-            values.append(stripped[2:].strip())
-    return values
-
-
-def single_bullet(lines: list[str], default: str = "") -> str:
-    values = bullet_values(lines)
-    return values[0] if values else default
 
 
 def parse_slice_markdown(path: Path) -> dict:

@@ -5,10 +5,20 @@ import json
 import re
 import subprocess
 import sys
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from pm_dawn_core.markdown import bullet_values, parse_markdown_sections, single_bullet
+from pm_dawn_core.profile import (
+    classify_path_fallback,
+    load_project_profile as load_core_project_profile,
+    make_default_profile,
+    repo_root,
+)
 
 REQUIRED_HANDOFF_FIELDS = [
     "schema_version",
@@ -29,94 +39,84 @@ REQUIRED_HANDOFF_FIELDS = [
     "source_context",
 ]
 
-DEFAULT_PROJECT_PROFILE: dict = {
-    "project": {
-        "name": "PM Dawn Project",
-        "issue_key_pattern": r"\b[A-Z][A-Z0-9]+-\d+\b",
-    },
-    "branches": {
-        "allowed_prefixes": ["feature", "fix", "chore"],
-        "template": "<type>/<jira-key>-<slug>",
-        "allow_codex_prefix": True,
-    },
-    "validation": {
-        "full_suite_command": "make check",
-    },
-    "planning": {
-        "default_search_surfaces": ["apps", "packages"],
-        "secondary_search_surfaces": ["tests"],
-        "include_tests_by_default": False,
-        "prefer_non_test_matches": True,
-    },
-    "packetization": {
-        "allow_tests_only_feature_slices": False,
-        "feature_goal_keywords": [
-            "add",
-            "build",
-            "wire",
-            "implement",
-            "support",
-            "introduce",
-            "surface",
-            "panel",
-            "screen",
-            "view",
-            "hydrate",
-            "hydration",
-            "reconnect",
-            "diagnostic",
-            "lane",
-            "control",
-            "stream",
-            "replay",
-            "policy",
-            "simulate",
+DEFAULT_PROJECT_PROFILE: dict = make_default_profile(
+    {
+        "planning": {
+            "default_search_surfaces": ["."],
+            "secondary_search_surfaces": ["tests"],
+            "include_tests_by_default": False,
+            "prefer_non_test_matches": True,
+        },
+        "packetization": {
+            "allow_tests_only_feature_slices": False,
+            "feature_goal_keywords": [
+                "add",
+                "build",
+                "wire",
+                "implement",
+                "support",
+                "introduce",
+                "surface",
+                "panel",
+                "screen",
+                "view",
+                "hydrate",
+                "hydration",
+                "reconnect",
+                "diagnostic",
+                "lane",
+                "control",
+                "stream",
+                "replay",
+                "policy",
+                "simulate",
+                "bootstrap",
+                "profile",
+                "repository",
+            ],
+            "wiring_step_keywords": [
+                "wire",
+                "wiring",
+                "client",
+                "panel",
+                "screen",
+                "view",
+                "attach",
+                "detach",
+                "stream",
+                "replay",
+                "hydrate",
+                "resume",
+                "render",
+                "control",
+                "load",
+                "fetch",
+                "bootstrap",
+            ],
+            "behavioral_tokens": [
+                "workflow",
+                "attach",
+                "detach",
+                "session",
+                "stream",
+                "replay",
+                "auth",
+                "policy",
+                "lane",
+                "control",
+                "navigation",
+                "bootstrap",
+                "profile",
+            ],
+        },
+        "review": {
+            "tag_surfaces": {},
+        },
+        "seam_rules": [
+            {"prefix": "tests/", "packet_type": "tests", "search_weight": 1},
         ],
-        "wiring_step_keywords": [
-            "wire",
-            "wiring",
-            "client",
-            "panel",
-            "screen",
-            "view",
-            "attach",
-            "detach",
-            "stream",
-            "replay",
-            "hydrate",
-            "resume",
-            "render",
-            "control",
-            "load",
-            "fetch",
-        ],
-        "behavioral_tokens": [
-            "workflow",
-            "attach",
-            "detach",
-            "session",
-            "stream",
-            "replay",
-            "auth",
-            "policy",
-            "lane",
-            "control",
-            "navigation",
-        ],
-    },
-    "review": {
-        "tag_surfaces": {},
-    },
-    "seam_rules": [
-        {"prefix": "packages/core/", "packet_type": "contract", "search_weight": 2},
-        {"prefix": "apps/api/", "packet_type": "wiring", "search_weight": 3},
-        {"prefix": "apps/tui/", "packet_type": "wiring", "search_weight": 3},
-        {"prefix": "packages/runtime-langgraph/", "packet_type": "wiring", "search_weight": 2},
-        {"prefix": "packages/runtime-adk/", "packet_type": "wiring", "search_weight": 2},
-        {"prefix": "packages/db/", "packet_type": "wiring", "search_weight": 2},
-        {"prefix": "tests/", "packet_type": "tests", "search_weight": 1},
-    ],
-}
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -137,30 +137,8 @@ def emit_json(payload: object) -> None:
     sys.stdout.write("\n")
 
 
-def repo_root(path: str | Path = ".") -> Path:
-    return Path(path).resolve()
-
-
-def project_profile_path(root: Path) -> Path:
-    return root / ".pm-dawn" / "project-profile.toml"
-
-
-def merge_profile(base: dict, override: dict) -> dict:
-    merged = dict(base)
-    for key, value in override.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = merge_profile(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
-
-
 def load_project_profile(root: Path) -> dict:
-    path = project_profile_path(root)
-    if not path.exists():
-        return json.loads(json.dumps(DEFAULT_PROJECT_PROFILE))
-    loaded = tomllib.loads(path.read_text(encoding="utf-8"))
-    return merge_profile(json.loads(json.dumps(DEFAULT_PROJECT_PROFILE)), loaded)
+    return load_core_project_profile(root, DEFAULT_PROJECT_PROFILE)
 
 
 def slice_paths(root: Path, epic_key: str, group_id: str) -> SlicePaths:
@@ -276,6 +254,9 @@ def run_cmd(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subp
 
 
 def tracked_files(root: Path, prefix: str) -> list[str]:
+    if prefix in {"", "."}:
+        proc = run_cmd(["rg", "--files", "."], cwd=root)
+        return [line.strip().removeprefix("./") for line in proc.stdout.splitlines() if line.strip()]
     target = root / prefix
     if target.is_file():
         return [str(target.relative_to(root))]
@@ -401,7 +382,9 @@ def seam_rule_for_path(path: str, profile: dict) -> dict:
 
 def classify_repo_path(path: str, profile: dict) -> str:
     rule = seam_rule_for_path(path, profile)
-    return str(rule.get("packet_type", "cleanup"))
+    if rule:
+        return str(rule.get("packet_type", "cleanup"))
+    return classify_path_fallback(path)
 
 
 def full_suite_command(profile: dict) -> str:
@@ -433,44 +416,6 @@ def list_lines(items: list[str], default: str = "- None") -> str:
     if not items:
         return default
     return "\n".join(f"- {item}" for item in items)
-
-
-SECTION_RE = re.compile(r"^([A-Za-z][A-Za-z0-9 /_-]+):\s*$")
-
-
-def parse_markdown_sections(markdown: str) -> tuple[str | None, dict[str, list[str]]]:
-    title: str | None = None
-    sections: dict[str, list[str]] = {}
-    current: str | None = None
-    for raw_line in markdown.splitlines():
-        line = raw_line.rstrip()
-        if line.startswith("# "):
-            title = line[2:].strip()
-            continue
-        match = SECTION_RE.match(line)
-        if match:
-            current = match.group(1)
-            sections[current] = []
-            continue
-        if current is not None:
-            sections[current].append(line)
-    return title, sections
-
-
-def bullet_values(lines: list[str]) -> list[str]:
-    values: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("- "):
-            values.append(stripped[2:].strip())
-    return values
-
-
-def single_bullet(lines: list[str], default: str = "") -> str:
-    values = bullet_values(lines)
-    if not values:
-        return default
-    return values[0]
 
 
 def packet_markdown_path(root: Path, epic_key: str, packet_id_value: str) -> Path:

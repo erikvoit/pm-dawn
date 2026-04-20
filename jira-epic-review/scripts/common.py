@@ -5,10 +5,18 @@ import json
 import re
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from pm_dawn_core.profile import (
+    load_project_profile as load_core_project_profile,
+    make_default_profile,
+    repo_root,
+)
 
 def run_acli(args: list[str]) -> str:
     proc = subprocess.run(
@@ -137,46 +145,20 @@ REQUIRED_STORY_SECTIONS = [
     "Dependencies",
 ]
 
-DEFAULT_PROJECT_PROFILE: dict = {
-    "project": {
-        "name": "PM Dawn Project",
-        "issue_key_pattern": r"\b[A-Z][A-Z0-9]+-\d+\b",
-    },
-    "branches": {
-        "allowed_prefixes": ["feature", "fix", "chore"],
-        "template": "<type>/<jira-key>-<slug>",
-        "default_type": "feature",
-    },
-    "review": {
-        "tag_surfaces": {},
-    },
-}
-
-
-def repo_root(path: str | Path = ".") -> Path:
-    return Path(path).resolve()
-
-
-def project_profile_path(root: Path) -> Path:
-    return root / ".pm-dawn" / "project-profile.toml"
-
-
-def merge_profile(base: dict, override: dict) -> dict:
-    merged = dict(base)
-    for key, value in override.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = merge_profile(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
+DEFAULT_PROJECT_PROFILE: dict = make_default_profile(
+    {
+        "branches": {
+            "default_type": "feature",
+        },
+        "review": {
+            "tag_surfaces": {},
+        },
+    }
+)
 
 
 def load_project_profile(root: Path) -> dict:
-    path = project_profile_path(root)
-    if not path.exists():
-        return json.loads(json.dumps(DEFAULT_PROJECT_PROFILE))
-    loaded = tomllib.loads(path.read_text(encoding="utf-8"))
-    return merge_profile(json.loads(json.dumps(DEFAULT_PROJECT_PROFILE)), loaded)
+    return load_core_project_profile(root, DEFAULT_PROJECT_PROFILE)
 
 
 def parse_story_sections(description: str) -> dict[str, str]:
