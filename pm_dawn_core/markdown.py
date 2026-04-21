@@ -40,6 +40,11 @@ def single_bullet(lines: list[str], default: str = "") -> str:
     return values[0] if values else default
 
 
+def bullet_values_or_empty(lines: list[str]) -> list[str]:
+    values = bullet_values(lines)
+    return [] if values == ["None"] else values
+
+
 def parse_packet_markdown(path: Path) -> dict:
     if not path.exists():
         raise RuntimeError(f"packet Markdown not found: {path}")
@@ -80,13 +85,13 @@ def parse_packet_markdown(path: Path) -> dict:
         "packet_id": packet_id_value,
         "goal": single_bullet(sections.get("Goal", [])),
         "packet_type": packet_type,
-        "depends_on": [] if bullet_values(sections.get("Depends On", [])) == ["None"] else bullet_values(sections.get("Depends On", [])),
-        "files_to_read": [] if bullet_values(sections.get("Files to Read", [])) == ["None"] else bullet_values(sections.get("Files to Read", [])),
-        "files_to_change": [] if bullet_values(sections.get("Files to Change", [])) == ["None"] else bullet_values(sections.get("Files to Change", [])),
-        "implementation_steps": [] if bullet_values(sections.get("Implementation Steps", [])) == ["None"] else bullet_values(sections.get("Implementation Steps", [])),
-        "validation_steps": [] if bullet_values(sections.get("Validation Steps", [])) == ["None"] else bullet_values(sections.get("Validation Steps", [])),
-        "acceptance_checks": [] if bullet_values(sections.get("Acceptance Checks", [])) == ["None"] else bullet_values(sections.get("Acceptance Checks", [])),
-        "constraints": [] if bullet_values(sections.get("Constraints", [])) == ["None"] else bullet_values(sections.get("Constraints", [])),
+        "depends_on": bullet_values_or_empty(sections.get("Depends On", [])),
+        "files_to_read": bullet_values_or_empty(sections.get("Files to Read", [])),
+        "files_to_change": bullet_values_or_empty(sections.get("Files to Change", [])),
+        "implementation_steps": bullet_values_or_empty(sections.get("Implementation Steps", [])),
+        "validation_steps": bullet_values_or_empty(sections.get("Validation Steps", [])),
+        "acceptance_checks": bullet_values_or_empty(sections.get("Acceptance Checks", [])),
+        "constraints": bullet_values_or_empty(sections.get("Constraints", [])),
         "primary_issue": primary_issue,
         "secondary_issues": secondary_issues,
         "branch_name": branch_name,
@@ -108,18 +113,18 @@ def parse_plan_markdown(path: Path) -> dict:
     for item in packet_breakdown:
         packet_name, _sep, goal = item.partition(":")
         packets.append({"packet_id": packet_name.strip(), "goal": goal.strip()})
-    packet_order = [] if bullet_values(sections.get("Packet Ordering", [])) == ["None"] else bullet_values(sections.get("Packet Ordering", []))
+    packet_order = bullet_values_or_empty(sections.get("Packet Ordering", []))
     return {
         "title": title,
         "slice_identity": bullet_values(sections.get("Slice Identity", [])),
         "goal": single_bullet(sections.get("Goal", [])),
-        "approved_approach": [] if bullet_values(sections.get("Approved Implementation Approach", [])) == ["None"] else bullet_values(sections.get("Approved Implementation Approach", [])),
-        "files_to_change": [] if bullet_values(sections.get("Files Likely to Change", [])) == ["None"] else bullet_values(sections.get("Files Likely to Change", [])),
-        "files_not_to_change": [] if bullet_values(sections.get("Files Explicitly Not to Change", [])) == ["None"] else bullet_values(sections.get("Files Explicitly Not to Change", [])),
-        "validation_strategy": [] if bullet_values(sections.get("Validation Strategy", [])) == ["None"] else bullet_values(sections.get("Validation Strategy", [])),
-        "risks": [] if bullet_values(sections.get("Risks and Constraints", [])) == ["None"] else bullet_values(sections.get("Risks and Constraints", [])),
-        "open_questions": [] if bullet_values(sections.get("Open Questions", [])) == ["None"] else bullet_values(sections.get("Open Questions", [])),
+        "approved_approach": bullet_values_or_empty(sections.get("Approved Implementation Approach", [])),
+        "files_to_change": bullet_values_or_empty(sections.get("Files Likely to Change", [])),
+        "files_not_to_change": bullet_values_or_empty(sections.get("Files Explicitly Not to Change", [])),
+        "validation_strategy": bullet_values_or_empty(sections.get("Validation Strategy", [])),
+        "risks": bullet_values_or_empty(sections.get("Risks and Constraints", [])),
+        "open_questions": bullet_values_or_empty(sections.get("Open Questions", [])),
         "packets": packets,
         "packet_order": packet_order,
-        "source_context": bullet_values(sections.get("Source Context", [])),
+        "source_context": bullet_values_or_empty(sections.get("Source Context", [])),
     }
