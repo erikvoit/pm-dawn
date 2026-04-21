@@ -4,6 +4,13 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from pm_dawn_core.markdown import parse_plan_markdown
 
 from common import (
     classify_repo_path,
@@ -13,7 +20,6 @@ from common import (
     load_handoff,
     load_project_profile,
     packet_id,
-    parse_plan_markdown,
     repo_root,
 )
 
