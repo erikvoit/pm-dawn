@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path
 
 from common import emit_json, repo_root
+from pm_dawn_core.bootstrap import bootstrap_workspace
 
 
 def parse_args() -> argparse.Namespace:
@@ -142,6 +143,7 @@ def migrate_archive(pm_root: Path, *, dry_run: bool) -> tuple[list[dict], list[s
 def main() -> None:
     args = parse_args()
     root = repo_root(args.repo_root)
+    bootstrap_workspace(root, create_profile=False)
     pm_root = root / ".pm-dawn"
     moved_active, deleted_active = migrate_active_epics(pm_root, dry_run=args.dry_run)
     moved_archive, deleted_archive = migrate_archive(pm_root, dry_run=args.dry_run)

@@ -6,6 +6,13 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+import sys
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from pm_dawn_core.bootstrap import bootstrap_workspace
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate .pm-dawn handoff artifacts from an epic review plan.")
@@ -115,6 +122,7 @@ def render_index_md(epic_key: str, manifest: dict, groups: list[dict], plan: dic
 def main() -> None:
     args = parse_args()
     repo_root = Path(args.repo_root).resolve()
+    bootstrap_workspace(repo_root, create_profile=True)
     plan = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
     review = json.loads(Path(args.review_json).read_text(encoding="utf-8")) if args.review_json else {}
 

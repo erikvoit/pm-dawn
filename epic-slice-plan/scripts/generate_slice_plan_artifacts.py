@@ -16,6 +16,7 @@ from common import (
     write_text,
 )
 from inspect_slice_context import build_inspect_payload
+from pm_dawn_core.bootstrap import bootstrap_workspace
 
 
 def parse_args() -> argparse.Namespace:
@@ -129,6 +130,7 @@ Jira Traceability:
 def main() -> None:
     args = parse_args()
     root = repo_root(args.repo_root)
+    bootstrap_workspace(root, create_profile=True)
     profile = load_project_profile(root)
     handoff, paths = load_handoff(root, args.epic_key, args.group_id)
     markdown = read_optional_text(paths.slice_md)
