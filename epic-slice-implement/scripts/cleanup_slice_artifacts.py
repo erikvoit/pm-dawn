@@ -5,9 +5,16 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import sys
 from pathlib import Path
 
-from common import emit_json, repo_root
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from common import emit_json
+from pm_dawn_core.layout import epic_root, slice_archive_root, slice_artifact_targets
+from pm_dawn_core.profile import repo_root
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,37 +34,6 @@ def parse_args() -> argparse.Namespace:
         help="Report what would be archived or deleted without modifying files.",
     )
     return parser.parse_args()
-
-
-def _iter_targets(epic_root: Path, group_id: str) -> list[Path]:
-    targets: list[Path] = []
-    exact = [
-        epic_root / "slices" / f"{group_id}.md",
-        epic_root / "plans" / f"{group_id}.plan.md",
-        epic_root / "ops" / "runs" / f"{group_id}.json",
-        epic_root / "ops" / "runs" / f"{group_id}.plan.md",
-        epic_root / "ops" / "runs" / f"{group_id}.result.md",
-        epic_root / "ops" / "pr" / f"{group_id}.title.txt",
-        epic_root / "ops" / "pr" / f"{group_id}.body.md",
-        epic_root / "ops" / "pr" / f"{group_id}.verify.json",
-    ]
-    targets.extend(path for path in exact if path.exists())
-
-    glob_patterns = [
-        f"packets/{group_id}__*.md",
-        f"ops/handoffs/{group_id}__*.json",
-        f"ops/pr/{group_id}__*.title.txt",
-        f"ops/pr/{group_id}__*.body.md",
-        f"ops/pr/{group_id}__*.verify.json",
-        f"ops/artifacts/*{group_id}*",
-    ]
-    for pattern in glob_patterns:
-        targets.extend(path for path in epic_root.glob(pattern) if path.is_file())
-
-    # Stable order and dedupe.
-    return sorted(set(targets))
-
-
 def _archive_targets(
     *,
     epic_root: Path,
@@ -89,9 +65,9 @@ def _delete_targets(*, targets: list[Path], dry_run: bool) -> list[str]:
 def main() -> None:
     args = parse_args()
     root = repo_root(args.repo_root)
-    epic_root = root / ".pm-dawn" / "epics" / args.epic_key
-    archive_root = root / ".pm-dawn" / "archive" / args.epic_key / args.group_id
-    targets = _iter_targets(epic_root, args.group_id)
+    epic_path = epic_root(root, args.epic_key)
+    archive_path = slice_archive_root(root, args.epic_key, args.group_id)
+    targets = slice_artifact_targets(root, args.epic_key, args.group_id)
     if not targets:
         raise SystemExit(f"no slice artifacts found for {args.epic_key}/{args.group_id}")
 
@@ -100,8 +76,8 @@ def main() -> None:
 
     if args.mode == "archive":
         archived = _archive_targets(
-            epic_root=epic_root,
-            archive_root=archive_root,
+            epic_root=epic_path,
+            archive_root=archive_path,
             targets=targets,
             dry_run=args.dry_run,
         )
