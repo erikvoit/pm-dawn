@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 import tomllib
@@ -22,7 +23,7 @@ BASE_PROJECT_PROFILE: dict = {
 
 
 def clone_profile(profile: dict) -> dict:
-    return json.loads(json.dumps(profile))
+    return copy.deepcopy(profile)
 
 
 def repo_root(path: str | Path = ".") -> Path:
