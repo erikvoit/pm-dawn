@@ -7,11 +7,14 @@ import unittest
 from pathlib import Path
 
 from pm_dawn_core.layout import (
+    SlicePaths,
     epic_root,
     epics_root,
     ops_root,
+    packet_markdown_path,
     pm_dawn_root,
     project_profile_path,
+    slice_paths,
 )
 
 
@@ -60,6 +63,84 @@ class TestProjectProfilePath(unittest.TestCase):
             profile = project_profile_path(root)
             expected = root / ".pm-dawn" / "project-profile.toml"
             self.assertEqual(expected.resolve(), profile.resolve())
+
+
+class TestSlicePaths(unittest.TestCase):
+    def test_slice_paths_dataclass_has_expected_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            epic_key = "RPVINF-123"
+            group_id = "consumer_enablement_2"
+            paths = slice_paths(root, epic_key, group_id)
+            self.assertIsInstance(paths, SlicePaths)
+            # Verify all expected fields exist
+            self.assertIsNotNone(paths.root)
+            self.assertIsNotNone(paths.epic_root)
+            self.assertIsNotNone(paths.index_md)
+            self.assertIsNotNone(paths.slice_md)
+            self.assertIsNotNone(paths.ops_dir)
+            self.assertIsNotNone(paths.plans_dir)
+            self.assertIsNotNone(paths.packets_dir)
+            self.assertIsNotNone(paths.handoffs_dir)
+            self.assertIsNotNone(paths.artifacts_dir)
+
+    def test_slice_paths_structure_for_epic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            epic_key = "RPVINF-123"
+            group_id = "consumer_enablement_2"
+            paths = slice_paths(root, epic_key, group_id)
+            expected_epic_root = root / ".pm-dawn" / "epics" / epic_key
+            expected_slice_md = expected_epic_root / "slices" / f"{group_id}.md"
+            expected_ops_dir = expected_epic_root / "ops"
+            expected_plans_dir = expected_epic_root / "plans"
+            expected_packets_dir = expected_epic_root / "packets"
+            expected_handoffs_dir = expected_ops_dir / "handoffs"
+            expected_artifacts_dir = expected_ops_dir / "artifacts"
+            self.assertEqual(expected_epic_root.resolve(), paths.epic_root.resolve())
+            self.assertEqual(expected_slice_md.resolve(), paths.slice_md.resolve())
+            self.assertEqual(expected_ops_dir.resolve(), paths.ops_dir.resolve())
+            self.assertEqual(expected_plans_dir.resolve(), paths.plans_dir.resolve())
+            self.assertEqual(expected_packets_dir.resolve(), paths.packets_dir.resolve())
+            self.assertEqual(expected_handoffs_dir.resolve(), paths.handoffs_dir.resolve())
+            self.assertEqual(expected_artifacts_dir.resolve(), paths.artifacts_dir.resolve())
+
+
+class TestSlicePathsFunction(unittest.TestCase):
+    def test_slice_paths_returns_correct_structure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            epic_key = "RPVINF-124"
+            group_id = "consumer_enablement_2"
+            paths = slice_paths(root, epic_key, group_id)
+            # Verify root is the resolved absolute path
+            self.assertTrue(paths.root.is_absolute())
+            # Verify epic root is inside .pm-dawn/epics
+            self.assertIn(".pm-dawn", str(paths.epic_root))
+            self.assertIn("epics", str(paths.epic_root))
+            self.assertIn(epic_key, str(paths.epic_root))
+
+
+class TestPacketMarkdownPath(unittest.TestCase):
+    def test_packet_markdown_path_returns_correct_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            epic_key = "RPVINF-124"
+            packet_id_value = "consumer_enablement_2__01_contract"
+            path = packet_markdown_path(root, epic_key, packet_id_value)
+            expected = root / ".pm-dawn" / "epics" / epic_key / "packets" / f"{packet_id_value}.md"
+            self.assertEqual(expected.resolve(), path.resolve())
+
+    def test_packet_markdown_path_with_different_packet_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            epic_key = "RPVINF-124"
+            group_id = "consumer_enablement_2"
+            # Test with packet ID that includes group prefix
+            packet_id_value = f"{group_id}__03_tests"
+            path = packet_markdown_path(root, epic_key, packet_id_value)
+            expected = root / ".pm-dawn" / "epics" / epic_key / "packets" / f"{packet_id_value}.md"
+            self.assertEqual(expected.resolve(), path.resolve())
 
 
 if __name__ == "__main__":
