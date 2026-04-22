@@ -12,6 +12,7 @@ Preferred phase split:
   - read the packet Markdown
   - write `ops/artifacts/<packet-id>.implementation-plan.md`
   - do not treat the run as successful unless that file exists at the end
+  - treat the written artifact as a worker-authored draft for review, not as self-approving authority
 - `planning` run:
   - read the handoff
   - inspect the repo
@@ -50,6 +51,7 @@ Completion/result flow:
   - `worker.status: pending_review`
   - this means “the worker believes the packet is ready for review”
   - it does not mean the packet is accepted
+- in the common Codex-Pi flow, Codex reviews Pi-authored plans rather than directly editing the worker's in-flight implementation session into a new scope
 - when a phase finishes cleanly, capture the final assistant output into:
   - `<group-id>.plan.md` for planning
   - `<group-id>.result.md` for implementation

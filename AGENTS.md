@@ -3,6 +3,12 @@
 ## Purpose
 PM Dawn is a portable skill/tooling bundle intended to run from an installed skill directory such as a Codex skills directory or an OpenCode skills directory. Its workflow scripts should be invokable by multiple agent harnesses without requiring repo-specific Python environment setup.
 
+Architecturally, PM Dawn is split between:
+- a protocol core that owns `.pm-dawn` contracts, command surfaces, and prompt/runtime rules
+- a harness boundary that owns provider/session/orchestration details for concrete runtimes such as Codex, Pi, or OpenCode
+
+See [epic-slice-implement/references/architecture-boundary.md](./epic-slice-implement/references/architecture-boundary.md) for the durable architecture and ACP-convergence boundary recorded under `RPVINF-130`.
+
 This document defines the runtime and dependency policy that should guide work in `RPVINF-125` and related refactor stories.
 
 ## Runtime Policy
@@ -110,3 +116,6 @@ That work includes:
 - Prefer explicit workflow CLIs over hidden Python-library assumptions.
 - Prefer existing repo dependencies only for repo-owned generated code, not for PM Dawn’s own core runtime.
 - If a third-party Python package seems necessary, stop and document the justification, runtime implications, and harness contract before introducing it.
+- Keep the line between protocol-core behavior, harness-specific orchestration, and future ACP convergence explicit instead of collapsing them in one change.
+- Treat `.pm-dawn/` as repo-local working state that should usually be added to `.gitignore` by default unless a task explicitly calls for checking those artifacts into version control.
+- “Ignored” here means Git ignore behavior only; agents should still read and use `.pm-dawn/` artifacts as normal workflow inputs and outputs.

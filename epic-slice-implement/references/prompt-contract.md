@@ -27,10 +27,12 @@ Launch prompts should include:
   - create a short todo list limited to packet scope
   - stop instead of expanding scope when the todo list would need out-of-scope work
 - for implementation runs, an explicit last-step instruction for the worker to mark `pending_review` when it believes the packet is ready for human review
+- for reviewed packet implementation briefs, language that makes the reviewer-approved brief authoritative for implementation approach rather than treating the worker's earlier draft as final
 
 Packet-plan runs should:
 - require the planning skill to write the `.implementation-plan.md` artifact
 - be considered failed if the run returns without that artifact existing on disk
+- treat the resulting artifact as review input that Codex or another reviewer can accept, tighten, or reject before implementation launch
 
 Steer prompts should include:
 - the same handoff path

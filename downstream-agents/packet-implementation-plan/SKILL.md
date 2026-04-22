@@ -22,6 +22,7 @@ It must not:
 - run formatters or code generators that change tracked files
 - invent missing routes, endpoints, or backend capability
 - claim placeholder behavior is complete behavior
+- treat its own draft as the final approved implementation brief
 
 ---
 
@@ -65,6 +66,16 @@ When you need to refer to the PM Dawn planning entrypoint from instructions or f
 10. If the file does not exist yet, write it and verify again.
 11. Do not consider the task complete until the file is confirmed to exist at the required path on disk.
 12. Stop. Do not implement anything in this skill.
+
+## Review Boundary
+
+This skill produces a worker-authored draft plan.
+
+That means:
+- the generated `.implementation-plan.md` is review input
+- Codex or another reviewer may tighten, correct, or reject it before implementation starts
+- the reviewed implementation brief, not the worker's first draft, becomes the authoritative implementation approach
+- this skill should never imply that writing the file is equivalent to plan approval
 
 ---
 

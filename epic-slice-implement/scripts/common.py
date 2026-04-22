@@ -320,18 +320,36 @@ def tmux_has_session(name: str) -> bool:
     return proc.returncode == 0
 
 
-def ensure_pm_dawn_ignored(root: Path) -> dict:
+def ensure_pm_dawn_ignored(
+    root: Path,
+    *,
+    create_gitignore: bool = False,
+    dry_run: bool = False,
+) -> dict:
     entry = ".pm-dawn/"
     gitignore = root / ".gitignore"
     if gitignore.exists():
         content = gitignore.read_text(encoding="utf-8").splitlines()
         if entry in content:
             return {"status": "already_ignored", "path": str(gitignore)}
+        text = gitignore.read_text(encoding="utf-8")
+        if dry_run:
+            return {"status": "would_add_to_gitignore", "path": str(gitignore)}
+        suffix = "" if text.endswith("\n") or text == "" else "\n"
+        gitignore.write_text(text + suffix + entry + "\n", encoding="utf-8")
+        return {"status": "added_to_gitignore", "path": str(gitignore)}
+    if create_gitignore:
+        if dry_run:
+            return {"status": "would_create_gitignore", "path": str(gitignore)}
+        gitignore.write_text(entry + "\n", encoding="utf-8")
+        return {"status": "created_gitignore", "path": str(gitignore)}
     exclude = root / ".git" / "info" / "exclude"
     if exclude.exists():
         content = exclude.read_text(encoding="utf-8").splitlines()
         if entry not in content:
             text = exclude.read_text(encoding="utf-8")
+            if dry_run:
+                return {"status": "would_add_to_git_info_exclude", "path": str(exclude)}
             suffix = "" if text.endswith("\n") or text == "" else "\n"
             exclude.write_text(text + suffix + entry + "\n", encoding="utf-8")
             return {"status": "added_to_git_info_exclude", "path": str(exclude)}
