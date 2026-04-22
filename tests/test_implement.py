@@ -11,13 +11,17 @@ import unittest
 from pathlib import Path
 
 from pm_dawn_core.implement import (
+    IMPLEMENT_COMMAND_SURFACES,
     build_launch_prompt,
     build_steer_prompt,
     compile_packet_handoff,
+    implement_command_relative_script_path,
     load_execution_input,
+    render_implement_command,
     resolve_agent_harness,
     resolve_harness_model,
     resolve_approved_plan_path,
+    resolve_implement_command,
 )
 
 
@@ -179,6 +183,63 @@ def build_repo_fixture(root: Path) -> None:
 
 
 class TestImplementHelpers(unittest.TestCase):
+    def test_resolve_implement_command_supports_canonical_ids_and_aliases(self) -> None:
+        pending_review = resolve_implement_command("pending-review")
+        self.assertEqual("mark_slice_pending_review.py", pending_review.script_name)
+        self.assertEqual(
+            pending_review,
+            resolve_implement_command("mark_slice_pending_review"),
+        )
+
+    def test_implement_command_surface_registry_stays_unique(self) -> None:
+        command_ids = [surface.command_id for surface in IMPLEMENT_COMMAND_SURFACES]
+        script_names = [surface.script_name for surface in IMPLEMENT_COMMAND_SURFACES]
+        self.assertEqual(len(command_ids), len(set(command_ids)))
+        self.assertEqual(len(script_names), len(set(script_names)))
+
+    def test_render_implement_command_uses_repo_relative_script_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            command = render_implement_command(
+                root,
+                "pending-review",
+                "RPVINF-124",
+                "consumer_enablement_5",
+                "--repo-root",
+                ".",
+                python_executable="python3",
+            )
+
+            self.assertEqual(
+                "python3 epic-slice-implement/scripts/mark_slice_pending_review.py "
+                "RPVINF-124 consumer_enablement_5 --repo-root .",
+                command,
+            )
+            self.assertEqual(
+                Path("epic-slice-implement/scripts/mark_slice_pending_review.py"),
+                implement_command_relative_script_path("pending-review"),
+            )
+
+    def test_render_implement_command_quotes_arguments_with_spaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            command = render_implement_command(
+                root,
+                "plan",
+                "RPVINF-124",
+                "consumer_enablement_5",
+                "consumer_enablement_5__02_wiring",
+                "--title",
+                "packet plan with spaces",
+            )
+
+            self.assertEqual(
+                "python epic-slice-implement/scripts/generate_packet_implementation_plan.py "
+                "RPVINF-124 consumer_enablement_5 consumer_enablement_5__02_wiring "
+                "--title 'packet plan with spaces'",
+                command,
+            )
+
     def test_load_execution_input_reads_slice_markdown(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
@@ -307,7 +368,7 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertIn("approved plan", prompt)
             self.assertIn("reviewed and corrected implementation brief", prompt)
             self.assertIn("feature/RPVINF-128-consumer-enablement", prompt)
-            self.assertIn('python3 "epic-slice-implement/scripts/mark_slice_pending_review.py"', prompt)
+            self.assertIn("python3 epic-slice-implement/scripts/mark_slice_pending_review.py", prompt)
             self.assertIn("epic-slice-implement/scripts/mark_slice_pending_review.py", prompt)
             self.assertIn("--repo-root .", prompt)
 
@@ -377,6 +438,13 @@ class TestImplementCliSmoke(unittest.TestCase):
             self.assertIn("Primary Jira key: RPVINF-128", result.stdout)
             self.assertIn("Packet type: contract", result.stdout)
             self.assertIn("reviewed and corrected implementation brief", result.stdout)
+
+    def test_build_opencode_prompt_help_uses_shared_command_description(self) -> None:
+        result = self.run_script(BUILD_PROMPT_SCRIPT, "--help")
+        self.assertIn(
+            "Build the exact launch or steer prompt for an implementation run.",
+            result.stdout,
+        )
 
 
 if __name__ == "__main__":

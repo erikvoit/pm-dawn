@@ -22,6 +22,10 @@ COMMON_SPEC.loader.exec_module(implement_common)
 SLICE_STATUS = REPO_ROOT / "epic-slice-implement" / "scripts" / "slice_status.py"
 CLEANUP_SLICE_ARTIFACTS = REPO_ROOT / "epic-slice-implement" / "scripts" / "cleanup_slice_artifacts.py"
 CLEANUP_SLICE_BY_NAME = REPO_ROOT / "epic-slice-implement" / "scripts" / "cleanup_slice_by_name.py"
+GENERATE_PACKET_IMPLEMENTATION_PLAN = (
+    REPO_ROOT / "epic-slice-implement" / "scripts" / "generate_packet_implementation_plan.py"
+)
+MIGRATE_PM_DAWN_LAYOUT = REPO_ROOT / "epic-slice-implement" / "scripts" / "migrate_pm_dawn_layout.py"
 
 
 def write_fixture(path: Path, content: str = "fixture\n") -> None:
@@ -220,6 +224,36 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                 payload["attach_instructions"],
             )
             self.assertIsNone(payload["last_completed_at"])
+
+    def test_generate_packet_implementation_plan_help_uses_shared_description(self) -> None:
+        result = self.run_script(GENERATE_PACKET_IMPLEMENTATION_PLAN, "--help")
+        self.assertIn(
+            "Generate a reviewed packet implementation-plan artifact.",
+            result.stdout,
+        )
+
+    def test_migrate_pm_dawn_layout_dry_run_reports_canonical_follow_up_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+
+            result = self.run_script(
+                MIGRATE_PM_DAWN_LAYOUT,
+                "--repo-root",
+                str(root),
+                "--dry-run",
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual(
+                "python epic-slice-implement/scripts/load_handoff.py "
+                "'<epic-key>' '<group-id>' --repo-root .",
+                payload["recommended_commands"]["load_handoff"],
+            )
+            self.assertEqual(
+                "python epic-slice-implement/scripts/launch_slice_session.py "
+                "'<epic-key>' '<group-id>' --repo-root .",
+                payload["recommended_commands"]["launch"],
+            )
 
 
 class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):

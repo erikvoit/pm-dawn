@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import shlex
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from .layout import (
@@ -37,6 +39,125 @@ REQUIRED_HANDOFF_FIELDS = [
     "open_questions",
     "source_context",
 ]
+
+
+@dataclass(frozen=True)
+class ImplementCommandSurface:
+    command_id: str
+    script_name: str
+    description: str
+    compatibility_aliases: tuple[str, ...] = ()
+
+    @property
+    def relative_script_path(self) -> Path:
+        return Path("epic-slice-implement") / "scripts" / self.script_name
+
+
+IMPLEMENT_COMMAND_SURFACES = (
+    ImplementCommandSurface(
+        command_id="handoff",
+        script_name="load_handoff.py",
+        description="Load and validate a .pm-dawn slice or packet handoff.",
+        compatibility_aliases=("load_handoff",),
+    ),
+    ImplementCommandSurface(
+        command_id="prompt",
+        script_name="build_opencode_prompt.py",
+        description="Build the exact launch or steer prompt for an implementation run.",
+        compatibility_aliases=("build_opencode_prompt",),
+    ),
+    ImplementCommandSurface(
+        command_id="plan",
+        script_name="generate_packet_implementation_plan.py",
+        description="Generate a reviewed packet implementation-plan artifact.",
+        compatibility_aliases=("generate_packet_implementation_plan",),
+    ),
+    ImplementCommandSurface(
+        command_id="launch",
+        script_name="launch_slice_session.py",
+        description="Launch a planning or implementation session through the configured harness.",
+        compatibility_aliases=("launch_slice_session",),
+    ),
+    ImplementCommandSurface(
+        command_id="server",
+        script_name="ensure_opencode_server.py",
+        description="Ensure the OpenCode server runtime is available for launches.",
+        compatibility_aliases=("ensure_opencode_server",),
+    ),
+    ImplementCommandSurface(
+        command_id="status",
+        script_name="slice_status.py",
+        description="Report the current lifecycle status for a slice run.",
+        compatibility_aliases=("slice_status",),
+    ),
+    ImplementCommandSurface(
+        command_id="pending-review",
+        script_name="mark_slice_pending_review.py",
+        description="Mark a worker-owned slice run as pending human review.",
+        compatibility_aliases=("mark_slice_pending_review",),
+    ),
+    ImplementCommandSurface(
+        command_id="sync",
+        script_name="sync_slice_session_state.py",
+        description="Sync session state and optionally write captured run artifacts.",
+        compatibility_aliases=("sync_slice_session_state",),
+    ),
+    ImplementCommandSurface(
+        command_id="steer",
+        script_name="steer_slice.py",
+        description="Send steering guidance to an in-flight slice session.",
+        compatibility_aliases=("steer_slice",),
+    ),
+    ImplementCommandSurface(
+        command_id="cleanup",
+        script_name="cleanup_slice_artifacts.py",
+        description="Archive or delete artifacts for one slice.",
+        compatibility_aliases=("cleanup_slice_artifacts",),
+    ),
+    ImplementCommandSurface(
+        command_id="cleanup-by-name",
+        script_name="cleanup_slice_by_name.py",
+        description="Resolve a slice by group id and reuse the cleanup flow.",
+        compatibility_aliases=("cleanup_slice_by_name",),
+    ),
+    ImplementCommandSurface(
+        command_id="record-run",
+        script_name="record_slice_run.py",
+        description="Persist launch metadata for the current slice run.",
+        compatibility_aliases=("record_slice_run",),
+    ),
+    ImplementCommandSurface(
+        command_id="migrate-layout",
+        script_name="migrate_pm_dawn_layout.py",
+        description="Create or migrate the .pm-dawn workspace layout.",
+        compatibility_aliases=("migrate_pm_dawn_layout",),
+    ),
+)
+
+
+def resolve_implement_command(command: str) -> ImplementCommandSurface:
+    normalized = command.strip().lower()
+    for surface in IMPLEMENT_COMMAND_SURFACES:
+        names = {surface.command_id, surface.script_name.removesuffix(".py"), *surface.compatibility_aliases}
+        if normalized in names:
+            return surface
+    raise KeyError(f"unknown epic-slice-implement command surface: {command}")
+
+
+def implement_command_relative_script_path(command: str) -> Path:
+    return resolve_implement_command(command).relative_script_path
+
+
+def render_implement_command(
+    root: Path,
+    command: str,
+    *args: str,
+    python_executable: str = "python",
+) -> str:
+    root = repo_root(root)
+    script_path = root / implement_command_relative_script_path(command)
+    relative = script_path.relative_to(root)
+    return shlex.join([python_executable, relative.as_posix(), *args])
 
 
 DEFAULT_PROJECT_PROFILE: dict = make_default_profile(
@@ -244,7 +365,15 @@ def build_launch_prompt(
     repo_name = root.name
     validation_command = full_suite_command(root)
     secondary = ", ".join(handoff.get("secondary_issues", [])) or "none"
-    pending_review_script = (root / "epic-slice-implement" / "scripts" / "mark_slice_pending_review.py").relative_to(root)
+    pending_review_command = render_implement_command(
+        root,
+        "pending-review",
+        handoff["epic_key"],
+        handoff["group_id"],
+        "--repo-root",
+        ".",
+        python_executable="python3",
+    )
     if phase == "planning":
         return f"""Read and follow AGENTS.md and CONTRIBUTING.md before making changes.
 
@@ -347,7 +476,7 @@ At the end, summarize:
 - any remaining risks or blockers
 
 If you believe the implementation pass is complete and ready for human review, as your final step run:
-- python3 "{pending_review_script}" {handoff['epic_key']} {handoff['group_id']} --repo-root .
+- {pending_review_command}
 
 Use that only to mark worker state as pending review.
 Do not mark the packet completed in metadata; reviewer acceptance is separate.

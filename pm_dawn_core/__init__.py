@@ -1,13 +1,18 @@
 from .bootstrap import bootstrap_workspace, starter_project_profile
 from .implement import (
+    IMPLEMENT_COMMAND_SURFACES,
+    ImplementCommandSurface,
     build_launch_prompt,
     build_steer_prompt,
     compile_packet_handoff,
+    implement_command_relative_script_path,
     load_execution_input,
     load_handoff,
     load_project_profile as load_implement_profile,
+    render_implement_command,
     resolve_agent_harness,
     resolve_approved_plan_path,
+    resolve_implement_command,
     resolve_harness_model,
 )
 from .layout import (
@@ -56,6 +61,8 @@ from .profile import (
 
 __all__ = [
     "BASE_PROJECT_PROFILE",
+    "IMPLEMENT_COMMAND_SURFACES",
+    "ImplementCommandSurface",
     "SlicePaths",
     "archive_root",
     "artifacts_root",
@@ -71,6 +78,7 @@ __all__ = [
     "epic_root",
     "epics_root",
     "handoffs_root",
+    "implement_command_relative_script_path",
     "implementation_plan_artifact_path",
     "legacy_opencode_plan_artifact_path",
     "load_execution_input",
@@ -88,9 +96,11 @@ __all__ = [
     "pm_dawn_root",
     "pr_root",
     "project_profile_path",
+    "render_implement_command",
     "repo_root",
     "resolve_agent_harness",
     "resolve_approved_plan_path",
+    "resolve_implement_command",
     "resolve_harness_model",
     "reviewed_plan_artifact_path",
     "run_artifact_path",
