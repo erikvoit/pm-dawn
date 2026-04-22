@@ -4,6 +4,13 @@ import json
 import sys
 from pathlib import Path
 
+from .layout import (
+    compiled_packet_json_path,
+    implementation_plan_artifact_path,
+    legacy_opencode_plan_artifact_path,
+    packet_markdown_path,
+    slice_markdown_path,
+)
 from .markdown import parse_packet_markdown, parse_slice_markdown
 from .profile import (
     load_project_profile as load_core_project_profile,
@@ -140,26 +147,6 @@ def validate_handoff(data: dict) -> None:
     missing = [field for field in REQUIRED_HANDOFF_FIELDS if field not in data]
     if missing:
         raise RuntimeError(f"handoff Markdown missing required fields: {', '.join(missing)}")
-
-
-def slice_markdown_path(root: Path, epic_key: str, group_id: str) -> Path:
-    return repo_root(root) / ".pm-dawn" / "epics" / epic_key / "slices" / f"{group_id}.md"
-
-
-def packet_markdown_path(root: Path, epic_key: str, packet_id: str) -> Path:
-    return repo_root(root) / ".pm-dawn" / "epics" / epic_key / "packets" / f"{packet_id}.md"
-
-
-def compiled_packet_json_path(root: Path, epic_key: str, packet_id: str) -> Path:
-    return repo_root(root) / ".pm-dawn" / "epics" / epic_key / "ops" / "handoffs" / f"{packet_id}.json"
-
-
-def implementation_plan_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
-    return repo_root(root) / ".pm-dawn" / "epics" / epic_key / "ops" / "artifacts" / f"{packet_id}.implementation-plan.md"
-
-
-def legacy_opencode_plan_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
-    return repo_root(root) / ".pm-dawn" / "epics" / epic_key / "ops" / "artifacts" / f"{packet_id}.opencode-plan.md"
 
 
 def load_handoff(root: Path, epic_key: str, group_id: str) -> tuple[dict, Path]:
