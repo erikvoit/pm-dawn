@@ -2,8 +2,16 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
-from common import emit_json, load_execution_input, repo_root
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from common import emit_json
+from pm_dawn_core.implement import load_execution_input
+from pm_dawn_core.profile import repo_root
 
 
 def parse_args() -> argparse.Namespace:

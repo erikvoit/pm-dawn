@@ -3,19 +3,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from common import (
     check_active_harness_model,
     emit_json,
-    implementation_plan_artifact_path,
-    packet_markdown_path,
     repo_root,
-    resolve_agent_harness,
-    resolve_harness_model,
 )
 from harness_opencode import run_packet_planning as run_opencode_packet_planning
 from harness_pi import run_packet_planning as run_pi_packet_planning
+from pm_dawn_core.implement import (
+    implementation_plan_artifact_path,
+    packet_markdown_path,
+    resolve_agent_harness,
+    resolve_harness_model,
+)
 
 
 def parse_args() -> argparse.Namespace:

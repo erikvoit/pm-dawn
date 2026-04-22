@@ -9,15 +9,17 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from common import (
     attach_instructions,
-    build_launch_prompt,
     check_active_harness_model,
     emit_json,
     ensure_pm_dawn_ignored,
     latest_session_by_title,
     launch_tmux_session_with_tail,
-    load_execution_input,
     opencode_server_session_name,
     opencode_slice_tmux_session_name,
     pi_attach_instructions,
@@ -27,12 +29,16 @@ from common import (
     pi_tail_script,
     poll_for_session,
     repo_root,
-    resolve_agent_harness,
-    resolve_harness_model,
-    resolve_approved_plan_path,
     run_cmd,
     slice_title,
     tmux_has_session,
+)
+from pm_dawn_core.implement import (
+    build_launch_prompt,
+    load_execution_input,
+    resolve_agent_harness,
+    resolve_approved_plan_path,
+    resolve_harness_model,
 )
 
 

@@ -127,6 +127,20 @@ Jira Traceability:
 """
 
 
+def ensure_plan_is_actionable(plan: dict) -> None:
+    if plan.get("files_to_change"):
+        return
+    raise RuntimeError(
+        "unable to infer files likely to change; add Repo Surfaces or explicit file references to the slice handoff before packetization"
+    )
+
+
+def ensure_packets_are_actionable(packets: list[dict]) -> None:
+    if packets:
+        return
+    raise RuntimeError("unable to packetize slice plan into execution packets; manual refinement required")
+
+
 def main() -> None:
     args = parse_args()
     root = repo_root(args.repo_root)
@@ -147,6 +161,7 @@ def main() -> None:
             str(paths.slice_md),
             None,
         )
+    ensure_plan_is_actionable(plan)
 
     if args.packets_json:
         packets_payload = json.loads(Path(args.packets_json).read_text(encoding="utf-8"))
@@ -161,6 +176,7 @@ def main() -> None:
         }
 
     packets = packets_payload.get("packets", [])
+    ensure_packets_are_actionable(packets)
     plan = {**plan, "packets": packets}
 
     plan_md_path = paths.plans_dir / f"{args.group_id}.plan.md"
