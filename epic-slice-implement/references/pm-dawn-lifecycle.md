@@ -1,5 +1,14 @@
 # `.pm-dawn` Lifecycle
 
+Canonical `epic-slice-implement` command surface:
+
+- load/inspect handoff: `python "epic-slice-implement/scripts/load_handoff.py" <epic-key> <group-id> --repo-root .`
+- build launch/steer prompt: `python "epic-slice-implement/scripts/build_opencode_prompt.py" <epic-key> <group-id> --repo-root .`
+- launch a slice session: `python "epic-slice-implement/scripts/launch_slice_session.py" <epic-key> <group-id> --repo-root .`
+- check lifecycle status: `python "epic-slice-implement/scripts/slice_status.py" <epic-key> <group-id> --repo-root .`
+
+Use those canonical commands in docs, prompts, and harness guidance even when a compatibility alias or wrapper also exists.
+
 Use this retention policy for slice artifacts:
 
 - active slice: keep everything

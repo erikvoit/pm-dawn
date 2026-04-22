@@ -20,17 +20,17 @@ from harness_pi import run_packet_planning as run_pi_packet_planning
 from pm_dawn_core.implement import (
     implementation_plan_artifact_path,
     packet_markdown_path,
+    render_implement_command,
     resolve_agent_harness,
     resolve_harness_model,
+    resolve_implement_command,
 )
 
 
 def parse_args() -> argparse.Namespace:
+    surface = resolve_implement_command("plan")
     parser = argparse.ArgumentParser(
-        description=(
-            "Run the packet planning skill and require the "
-            "packet .implementation-plan.md artifact to exist on success."
-        )
+        description=surface.description,
     )
     parser.add_argument("epic_key")
     parser.add_argument("group_id")
@@ -65,12 +65,22 @@ def main() -> None:
         raise SystemExit(f"packet Markdown not found: {packet_path}")
 
     title = args.title or f"packet-plan:{args.epic_key}:{args.packet_id}"
+    reviewed_artifact_command = render_implement_command(
+        root,
+        "plan",
+        args.epic_key,
+        args.group_id,
+        args.packet_id,
+        "--repo-root",
+        ".",
+    )
     prompt = (
         "Use the packet-implementation-plan skill. "
         f"Read {packet_path} and produce the implementation plan only. "
         f"Write it to {output_path}. "
         "Do not edit code, do not switch branches, and do not implement the packet. "
-        "This run is not successful unless the plan file exists at the required path when you finish."
+        "This run is not successful unless the plan file exists at the required path when you finish. "
+        f"The canonical PM Dawn command surface for this action is: {reviewed_artifact_command}"
     )
 
     if harness == "pi":

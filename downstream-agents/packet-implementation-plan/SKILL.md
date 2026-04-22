@@ -37,6 +37,10 @@ Resolve the canonical packet path as:
 Resolve the output path as:
 - `.pm-dawn/epics/<epic_key>/ops/artifacts/<packet_id>.implementation-plan.md`
 
+When you need to refer to the PM Dawn planning entrypoint from instructions or follow-up notes, use the canonical command surface:
+- `python "epic-slice-implement/scripts/generate_packet_implementation_plan.py" <epic_key> <group_id> <packet_id> --repo-root .`
+- Treat that as the stable PM Dawn command for reviewed packet planning, even if harnesses later add compatibility wrappers around it.
+
 ---
 
 ## Workflow

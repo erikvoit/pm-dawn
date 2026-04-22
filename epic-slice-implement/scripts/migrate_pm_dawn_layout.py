@@ -9,10 +9,12 @@ from pathlib import Path
 
 from common import emit_json, repo_root
 from pm_dawn_core.bootstrap import bootstrap_workspace
+from pm_dawn_core.implement import render_implement_command, resolve_implement_command
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Migrate .pm-dawn from handoffs/ to epics/ in one pass.")
+    surface = resolve_implement_command("migrate-layout")
+    parser = argparse.ArgumentParser(description=surface.description)
     parser.add_argument("--repo-root", default=".")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -157,6 +159,12 @@ def main() -> None:
             "deleted": deleted_active + deleted_archive,
             "epics_root": str(pm_root / "epics"),
             "archive_root": str(pm_root / "archive"),
+            "recommended_commands": {
+                "load_handoff": render_implement_command(root, "handoff", "<epic-key>", "<group-id>", "--repo-root", "."),
+                "build_prompt": render_implement_command(root, "prompt", "<epic-key>", "<group-id>", "--repo-root", "."),
+                "launch": render_implement_command(root, "launch", "<epic-key>", "<group-id>", "--repo-root", "."),
+                "status": render_implement_command(root, "status", "<epic-key>", "<group-id>", "--repo-root", "."),
+            },
         }
     )
 

@@ -9,12 +9,18 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pm_dawn_core.implement import build_launch_prompt, build_steer_prompt, load_execution_input
+from pm_dawn_core.implement import (
+    build_launch_prompt,
+    build_steer_prompt,
+    load_execution_input,
+    resolve_implement_command,
+)
 from pm_dawn_core.profile import repo_root
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build the exact opencode prompt for a .pm-dawn slice.")
+    surface = resolve_implement_command("prompt")
+    parser = argparse.ArgumentParser(description=surface.description)
     parser.add_argument("epic_key")
     parser.add_argument("group_id")
     parser.add_argument("--packet-id")
