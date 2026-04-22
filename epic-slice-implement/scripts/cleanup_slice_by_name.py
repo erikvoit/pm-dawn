@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from common import emit_json
-from pm_dawn_core.layout import epics_root, run_metadata_path, slice_markdown_path
+from pm_dawn_core.layout import epics_root, run_metadata_path, slice_markdown_path, slice_plan_path
 from pm_dawn_core.profile import repo_root
 
 
@@ -39,7 +39,7 @@ def _find_matches(root: Path, group_id: str, epic_key: str | None) -> list[str]:
             continue
         candidates = [
             slice_markdown_path(root, epic, group_id),
-            epics_path / epic / "plans" / f"{group_id}.plan.md",
+            slice_plan_path(root, epic, group_id),
             run_metadata_path(root, epic, group_id),
         ]
         if any(path.exists() for path in candidates):

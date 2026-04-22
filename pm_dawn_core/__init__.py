@@ -1,5 +1,6 @@
 from .bootstrap import bootstrap_workspace, starter_project_profile
 from .layout import (
+    SlicePaths,
     archive_root,
     artifacts_root,
     compiled_packet_json_path,
@@ -21,8 +22,16 @@ from .layout import (
     slice_archive_root,
     slice_artifact_targets,
     slice_markdown_path,
+    slice_paths,
+    slice_plan_path,
 )
-from .markdown import bullet_values, parse_markdown_sections, single_bullet
+from .markdown import (
+    bullet_values,
+    parse_markdown_sections,
+    parse_packet_markdown,
+    parse_plan_markdown,
+    single_bullet,
+)
 from .profile import (
     BASE_PROJECT_PROFILE,
     classify_path_fallback,
@@ -34,6 +43,7 @@ from .profile import (
 
 __all__ = [
     "BASE_PROJECT_PROFILE",
+    "SlicePaths",
     "archive_root",
     "artifacts_root",
     "bootstrap_workspace",
@@ -52,6 +62,8 @@ __all__ = [
     "ops_root",
     "packet_markdown_path",
     "parse_markdown_sections",
+    "parse_packet_markdown",
+    "parse_plan_markdown",
     "pm_dawn_root",
     "pr_root",
     "project_profile_path",
@@ -64,5 +76,7 @@ __all__ = [
     "slice_archive_root",
     "slice_artifact_targets",
     "slice_markdown_path",
+    "slice_paths",
+    "slice_plan_path",
     "starter_project_profile",
 ]
