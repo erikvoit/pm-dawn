@@ -257,7 +257,7 @@ def build_launch_prompt(
     repo_name = root.name
     validation_command = full_suite_command(root)
     secondary = ", ".join(handoff.get("secondary_issues", [])) or "none"
-    pending_review_script = root / "epic-slice-implement" / "scripts" / "mark_slice_pending_review.py"
+    pending_review_script = (root / "epic-slice-implement" / "scripts" / "mark_slice_pending_review.py").relative_to(root)
     if phase == "planning":
         return f"""Read and follow AGENTS.md and CONTRIBUTING.md before making changes.
 
@@ -360,7 +360,7 @@ At the end, summarize:
 - any remaining risks or blockers
 
 If you believe the implementation pass is complete and ready for human review, as your final step run:
-- {sys.executable} "{pending_review_script}" {handoff['epic_key']} {handoff['group_id']} --repo-root {root}
+- python3 "{pending_review_script}" {handoff['epic_key']} {handoff['group_id']} --repo-root .
 
 Use that only to mark worker state as pending review.
 Do not mark the packet completed in metadata; reviewer acceptance is separate.

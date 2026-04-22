@@ -307,7 +307,9 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertIn("approved plan", prompt)
             self.assertIn("reviewed and corrected implementation brief", prompt)
             self.assertIn("feature/RPVINF-128-consumer-enablement", prompt)
+            self.assertIn('python3 "epic-slice-implement/scripts/mark_slice_pending_review.py"', prompt)
             self.assertIn("epic-slice-implement/scripts/mark_slice_pending_review.py", prompt)
+            self.assertIn("--repo-root .", prompt)
 
     def test_build_steer_prompt_references_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
