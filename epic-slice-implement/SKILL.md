@@ -8,6 +8,11 @@ description: Launch and steer implementation of one .pm-dawn epic slice through 
 ## Overview
 Use this skill to implement one `.pm-dawn` slice handoff with the configured local agent harness. This skill is operational, not advisory.
 
+Architecture summary:
+- protocol-core behavior and command-surface rules come from shared PM Dawn contracts
+- harness-specific launch, attach, and session-management behavior stays at the harness boundary
+- the durable architecture and ACP boundary are documented in [references/architecture-boundary.md](./references/architecture-boundary.md)
+
 Default behavior:
 - mode: `launch`
 - runtime: `server`
@@ -121,6 +126,7 @@ For `tmux-run`, do not fake reliable live steering. Report the limitation and pr
   - if they conflict, the implementation agent must stop and report the conflict
 - For implementation runs, the worker may mark the run metadata as `pending_review` when it believes the packet is ready for review.
 - Worker-written `pending_review` is not acceptance. Reviewer/Codex completion is still the authority for `completion_state=completed`.
+- In the common Codex-Pi flow, Pi may author a draft packet implementation plan, but Codex reviews that draft and approves the implementation brief before coding starts.
 - Whole-slice slice Markdown remains the non-packet fallback.
 - Always instruct the implementation agent to read `AGENTS.md` and `CONTRIBUTING.md` before coding.
 - Never widen scope beyond the handoff.
@@ -289,3 +295,4 @@ python "$CODEX_HOME/skills/pm-dawn/epic-slice-implement/scripts/migrate_pm_dawn_
 - [references/opencode-workflow.md](./references/opencode-workflow.md): server vs tmux-run behavior and attach/steer expectations
 - [references/handoff-schema.md](./references/handoff-schema.md): required slice/packet execution fields and runtime metadata layout
 - [references/pm-dawn-lifecycle.md](./references/pm-dawn-lifecycle.md): retention, archive, and deletion policy for merged slices
+- [references/architecture-boundary.md](./references/architecture-boundary.md): protocol-core ownership, harness boundary, review protocol, and ACP convergence boundary

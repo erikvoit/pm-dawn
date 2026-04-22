@@ -86,3 +86,9 @@ Use them as the durable completion signal:
 Worker-owned review signal:
 - `worker.status=pending_review` means the implementation worker believes the packet is ready for review
 - this is not equivalent to acceptance or `completion_state=completed`
+
+Review protocol boundary:
+- worker-authored `.implementation-plan.md` artifacts are drafts for reviewer approval
+- Codex or another reviewer reviews and tightens that draft before implementation begins
+- the reviewed implementation brief is then used alongside the packet handoff
+- this schema does not make the worker the final authority on packet scope or acceptance

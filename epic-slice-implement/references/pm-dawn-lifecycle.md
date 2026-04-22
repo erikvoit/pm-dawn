@@ -9,6 +9,13 @@ Canonical `epic-slice-implement` command surface:
 
 Use those canonical commands in docs, prompts, and harness guidance even when a compatibility alias or wrapper also exists.
 
+Lifecycle scope note:
+
+- this document describes retention and post-merge handling for PM Dawn slice artifacts
+- `.pm-dawn/` should usually be treated as ephemeral working state and ignored in Git by default
+- it does not define first-run `.pm-dawn` bootstrap for every future repo shape
+- broad bootstrap completion remains outside the outcome claimed by `RPVINF-124`
+
 Use this retention policy for slice artifacts:
 
 - active slice: keep everything
@@ -35,3 +42,10 @@ Use delete when:
 - the slice is merged
 - Jira is updated to reflect the implementation
 - the PR and Jira record are now the durable source of truth
+
+Migration rationale:
+
+- keep enough repo-local artifact history for active review and short-term auditability
+- archive recently merged work when follow-up review context may still matter
+- delete slice-local artifacts only after Jira and the PR become the durable implementation record
+- keep the epic index and architecture references as the stable onboarding surface even after individual slices are cleaned up

@@ -7,7 +7,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-from common import emit_json, repo_root
+from common import emit_json, ensure_pm_dawn_ignored, repo_root
 from pm_dawn_core.bootstrap import bootstrap_workspace
 from pm_dawn_core.implement import render_implement_command, resolve_implement_command
 
@@ -17,6 +17,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=surface.description)
     parser.add_argument("--repo-root", default=".")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--no-ignore-pm-dawn",
+        action="store_true",
+        help="Do not add .pm-dawn/ to .gitignore during migration.",
+    )
     return parser.parse_args()
 
 
@@ -146,6 +151,9 @@ def main() -> None:
     args = parse_args()
     root = repo_root(args.repo_root)
     bootstrap_workspace(root, create_profile=False)
+    ignore_state = None
+    if not args.no_ignore_pm_dawn:
+        ignore_state = ensure_pm_dawn_ignored(root, create_gitignore=True, dry_run=args.dry_run)
     pm_root = root / ".pm-dawn"
     moved_active, deleted_active = migrate_active_epics(pm_root, dry_run=args.dry_run)
     moved_archive, deleted_archive = migrate_archive(pm_root, dry_run=args.dry_run)
@@ -153,6 +161,8 @@ def main() -> None:
         {
             "repo_root": str(root),
             "dry_run": args.dry_run,
+            "ignore_pm_dawn": not args.no_ignore_pm_dawn,
+            "ignore_state": ignore_state,
             "moved_count": len(moved_active) + len(moved_archive),
             "deleted_count": len(deleted_active) + len(deleted_archive),
             "moved": moved_active + moved_archive,

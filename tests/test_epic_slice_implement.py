@@ -235,6 +235,7 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
     def test_migrate_pm_dawn_layout_dry_run_reports_canonical_follow_up_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
+            (root / ".git").mkdir()
 
             result = self.run_script(
                 MIGRATE_PM_DAWN_LAYOUT,
@@ -254,6 +255,42 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                 "'<epic-key>' '<group-id>' --repo-root .",
                 payload["recommended_commands"]["launch"],
             )
+            self.assertTrue(payload["ignore_pm_dawn"])
+            self.assertEqual("would_create_gitignore", payload["ignore_state"]["status"])
+            self.assertTrue(payload["ignore_state"]["path"].endswith(".gitignore"))
+
+    def test_migrate_pm_dawn_layout_creates_gitignore_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            (root / ".git").mkdir()
+
+            result = self.run_script(
+                MIGRATE_PM_DAWN_LAYOUT,
+                "--repo-root",
+                str(root),
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertTrue(payload["ignore_pm_dawn"])
+            self.assertEqual("created_gitignore", payload["ignore_state"]["status"])
+            self.assertEqual(".pm-dawn/\n", (root / ".gitignore").read_text(encoding="utf-8"))
+
+    def test_migrate_pm_dawn_layout_skips_ignore_when_opted_out(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            (root / ".git").mkdir()
+
+            result = self.run_script(
+                MIGRATE_PM_DAWN_LAYOUT,
+                "--repo-root",
+                str(root),
+                "--no-ignore-pm-dawn",
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertFalse(payload["ignore_pm_dawn"])
+            self.assertIsNone(payload["ignore_state"])
+            self.assertFalse((root / ".gitignore").exists())
 
 
 class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
@@ -283,6 +320,21 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
             payload = implement_common.ensure_pm_dawn_ignored(root)
             self.assertEqual("not_git_repo", payload["status"])
             self.assertIsNone(payload["path"])
+
+    def test_ensure_pm_dawn_ignored_can_create_gitignore(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / ".git").mkdir()
+            payload = implement_common.ensure_pm_dawn_ignored(root, create_gitignore=True)
+            self.assertEqual("created_gitignore", payload["status"])
+            self.assertEqual(".pm-dawn/\n", (root / ".gitignore").read_text(encoding="utf-8"))
+
+    def test_ensure_pm_dawn_ignored_does_not_create_gitignore_outside_git_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            payload = implement_common.ensure_pm_dawn_ignored(root, create_gitignore=True)
+            self.assertEqual("not_git_repo", payload["status"])
+            self.assertFalse((root / ".gitignore").exists())
 
     def test_resolved_shell_executable_uses_override(self) -> None:
         with mock.patch.dict("os.environ", {"PM_DAWN_SHELL": "/bin/sh"}, clear=False):
