@@ -16,6 +16,7 @@ from common import (
     emit_json,
     parse_slice_markdown,
     read_json,
+    require_cli,
     run_cmd,
 )
 from pm_dawn_core.layout import run_metadata_path
@@ -62,6 +63,7 @@ def main() -> None:
     if not server_url or not session_id:
         raise SystemExit("server mode steering requires both server_url and session_id in run metadata")
 
+    require_cli("opencode")
     cmd = [
         "opencode",
         "run",

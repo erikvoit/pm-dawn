@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from common import emit_json, run_cmd, write_text
+from common import emit_json, require_cli, run_cmd, write_text
 
 
 def salvage_plan_from_stdout(stdout: str, epic_key: str, packet_id: str) -> str | None:
@@ -32,6 +32,7 @@ def run_packet_planning(
     model_check: dict,
     packet_path: Path,
 ) -> None:
+    require_cli("opencode")
     if output_path.exists():
         output_path.unlink()
     proc = run_cmd(

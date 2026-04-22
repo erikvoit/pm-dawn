@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -47,12 +49,45 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def runtime_home() -> Path | None:
+    override = os.environ.get("PM_DAWN_HOME") or os.environ.get("HOME")
+    if override:
+        return Path(override).expanduser()
+    try:
+        return Path.home()
+    except RuntimeError:
+        return None
+
+
+def provider_timeout_seconds() -> float:
+    raw = os.environ.get("PM_DAWN_PROVIDER_TIMEOUT_SECONDS", "2")
+    try:
+        return float(raw)
+    except ValueError:
+        return 2.0
+
+
 def opencode_config_path() -> Path:
-    return Path.home() / ".config" / "opencode" / "opencode.json"
+    override = os.environ.get("PM_DAWN_OPENCODE_CONFIG_PATH")
+    if override:
+        return Path(override).expanduser()
+    xdg_config = os.environ.get("XDG_CONFIG_HOME")
+    if xdg_config:
+        return Path(xdg_config).expanduser() / "opencode" / "opencode.json"
+    home = runtime_home()
+    if home is not None:
+        return home / ".config" / "opencode" / "opencode.json"
+    return Path(".config") / "opencode" / "opencode.json"
 
 
 def pi_models_config_path() -> Path:
-    return Path.home() / ".pi" / "agent" / "models.json"
+    override = os.environ.get("PM_DAWN_PI_MODELS_CONFIG_PATH")
+    if override:
+        return Path(override).expanduser()
+    home = runtime_home()
+    if home is not None:
+        return home / ".pi" / "agent" / "models.json"
+    return Path(".pi") / "agent" / "models.json"
 
 
 def load_opencode_config() -> dict:
@@ -144,7 +179,7 @@ def resolve_pi_model_aliases(model: str) -> dict:
 def fetch_provider_active_models(base_url: str) -> list[str]:
     parsed = urlparse(base_url)
     models_url = parsed._replace(path="/v1/models", params="", query="", fragment="").geturl()
-    with urlopen(models_url, timeout=2) as response:
+    with urlopen(models_url, timeout=provider_timeout_seconds()) as response:
         payload = json.loads(response.read().decode("utf-8"))
     candidates: set[str] = set()
     if isinstance(payload, dict):
@@ -260,13 +295,27 @@ def slice_title(epic_key: str, group_id: str, phase: str | None = None, packet_i
 
 
 def run_cmd(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
-    proc = subprocess.run(cmd, cwd=cwd, check=False, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, cwd=cwd, check=False, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"required CLI '{cmd[0]}' not found in PATH") from exc
     if check and proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"command failed: {' '.join(cmd)}")
     return proc
 
 
+def command_available(command: str) -> bool:
+    return shutil.which(command) is not None
+
+
+def require_cli(command: str) -> None:
+    if not command_available(command):
+        raise RuntimeError(f"required CLI '{command}' not found in PATH")
+
+
 def tmux_has_session(name: str) -> bool:
+    if not command_available("tmux"):
+        return False
     proc = subprocess.run(["tmux", "has-session", "-t", name], check=False, capture_output=True, text=True)
     return proc.returncode == 0
 
@@ -287,6 +336,9 @@ def ensure_pm_dawn_ignored(root: Path) -> dict:
             exclude.write_text(text + suffix + entry + "\n", encoding="utf-8")
             return {"status": "added_to_git_info_exclude", "path": str(exclude)}
         return {"status": "already_ignored", "path": str(exclude)}
+    git_dir = root / ".git"
+    if not git_dir.exists():
+        return {"status": "not_git_repo", "path": None}
     return {"status": "unprotected", "path": None}
 
 
@@ -312,8 +364,28 @@ def pi_console_log_path(session_dir: Path) -> Path:
     return session_dir / "console.log"
 
 
-def _zsh_command(script: str) -> str:
-    return f"/bin/zsh -lc {shlex.quote(script)}"
+def resolved_shell_executable() -> str:
+    candidates = [
+        os.environ.get("PM_DAWN_SHELL"),
+        os.environ.get("SHELL"),
+        "zsh",
+        "bash",
+        "sh",
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        path = Path(candidate).expanduser()
+        if path.is_absolute() and path.exists():
+            return str(path)
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    raise RuntimeError("no usable shell found; set PM_DAWN_SHELL to an available shell executable")
+
+
+def _shell_command(script: str) -> list[str]:
+    return [resolved_shell_executable(), "-lc", script]
 
 
 def launch_tmux_session_with_tail(
@@ -323,13 +395,15 @@ def launch_tmux_session_with_tail(
     runner_script: str,
     tail_script: str,
 ) -> None:
-    run_cmd(["tmux", "new-session", "-d", "-s", session_name, "-c", str(cwd), _zsh_command(runner_script)])
-    run_cmd(["tmux", "split-window", "-v", "-t", f"{session_name}:0", "-c", str(cwd), _zsh_command(tail_script)])
+    require_cli("tmux")
+    run_cmd(["tmux", "new-session", "-d", "-s", session_name, "-c", str(cwd), *_shell_command(runner_script)])
+    run_cmd(["tmux", "split-window", "-v", "-t", f"{session_name}:0", "-c", str(cwd), *_shell_command(tail_script)])
     run_cmd(["tmux", "select-layout", "-t", f"{session_name}:0", "even-vertical"])
 
 
 def pi_runner_script(*, root: Path, session_dir: Path, command: str) -> str:
     console_log = pi_console_log_path(session_dir)
+    shell_path = shlex.quote(resolved_shell_executable())
     return (
         f"cd {shlex.quote(str(root))} && "
         f"mkdir -p {shlex.quote(str(session_dir))} && "
@@ -337,7 +411,7 @@ def pi_runner_script(*, root: Path, session_dir: Path, command: str) -> str:
         f"{{ {command}; }} 2>&1 | tee -a {shlex.quote(str(console_log))}; "
         'runner_exit=${pipestatus[1]:-0}; '
         'printf "\\n[pm-dawn] runner exited with status %s\\n" "$runner_exit"; '
-        "exec /bin/zsh -i"
+        f"exec {shell_path} -i"
     )
 
 

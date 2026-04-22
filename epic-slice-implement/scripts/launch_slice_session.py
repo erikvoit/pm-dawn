@@ -28,6 +28,7 @@ from common import (
     pi_slice_tmux_session_name,
     pi_tail_script,
     poll_for_session,
+    require_cli,
     repo_root,
     run_cmd,
     slice_title,
@@ -157,6 +158,7 @@ def main() -> None:
         payload["approved_plan"] = str(approved_plan)
 
     if harness == "opencode" and args.runtime == "server":
+        require_cli("opencode")
         parsed = urlparse(args.server_url)
         server_session = opencode_server_session_name(root)
         if not tmux_has_session(server_session):
@@ -185,6 +187,7 @@ def main() -> None:
         return
 
     if harness == "pi":
+        require_cli("pi")
         worker_session = pi_slice_tmux_session_name(args.epic_key, args.group_id, args.packet_id)
         session_dir = pi_session_dir(root, args.epic_key, args.group_id, args.packet_id, args.phase)
         session_dir.mkdir(parents=True, exist_ok=True)
@@ -204,6 +207,7 @@ def main() -> None:
         payload["session_dir"] = str(session_dir)
         payload["attach_instructions"] = pi_attach_instructions(worker_session)
     elif args.runtime == "server":
+        require_cli("opencode")
         worker_session = opencode_slice_tmux_session_name(args.epic_key, args.group_id, args.packet_id)
         cmd = (
             f"cd {shlex.quote(str(root))} && "
@@ -217,6 +221,7 @@ def main() -> None:
             payload["opencode_session_id"] = session.get("id")
         payload["attach_instructions"] = attach_instructions(payload["server_url"], payload["opencode_session_id"], worker_session, root)
     else:
+        require_cli("opencode")
         worker_session = opencode_slice_tmux_session_name(args.epic_key, args.group_id, args.packet_id)
         cmd = (
             f"cd {shlex.quote(str(root))} && "

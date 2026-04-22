@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_ROOT = REPO_ROOT / "epic-slice-implement" / "scripts"
+COMMON_SPEC = importlib.util.spec_from_file_location("epic_slice_implement_common", SCRIPT_ROOT / "common.py")
+assert COMMON_SPEC is not None and COMMON_SPEC.loader is not None
+implement_common = importlib.util.module_from_spec(COMMON_SPEC)
+COMMON_SPEC.loader.exec_module(implement_common)
+
 SLICE_STATUS = REPO_ROOT / "epic-slice-implement" / "scripts" / "slice_status.py"
 CLEANUP_SLICE_ARTIFACTS = REPO_ROOT / "epic-slice-implement" / "scripts" / "cleanup_slice_artifacts.py"
 CLEANUP_SLICE_BY_NAME = REPO_ROOT / "epic-slice-implement" / "scripts" / "cleanup_slice_by_name.py"
@@ -212,6 +220,52 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                 payload["attach_instructions"],
             )
             self.assertIsNone(payload["last_completed_at"])
+
+
+class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
+    def test_opencode_config_path_prefers_env_override(self) -> None:
+        with mock.patch.dict("os.environ", {"PM_DAWN_OPENCODE_CONFIG_PATH": "/tmp/opencode.json"}, clear=False):
+            self.assertEqual(Path("/tmp/opencode.json"), implement_common.opencode_config_path())
+
+    def test_opencode_config_path_uses_xdg_config_home(self) -> None:
+        env = {"XDG_CONFIG_HOME": "/tmp/xdg-config"}
+        with mock.patch.dict("os.environ", env, clear=True):
+            self.assertEqual(
+                Path("/tmp/xdg-config") / "opencode" / "opencode.json",
+                implement_common.opencode_config_path(),
+            )
+
+    def test_pi_models_config_path_prefers_env_override(self) -> None:
+        with mock.patch.dict("os.environ", {"PM_DAWN_PI_MODELS_CONFIG_PATH": "/tmp/pi-models.json"}, clear=False):
+            self.assertEqual(Path("/tmp/pi-models.json"), implement_common.pi_models_config_path())
+
+    def test_tmux_has_session_returns_false_when_tmux_missing(self) -> None:
+        with mock.patch.object(implement_common, "command_available", return_value=False):
+            self.assertFalse(implement_common.tmux_has_session("missing-session"))
+
+    def test_ensure_pm_dawn_ignored_handles_non_git_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            payload = implement_common.ensure_pm_dawn_ignored(root)
+            self.assertEqual("not_git_repo", payload["status"])
+            self.assertIsNone(payload["path"])
+
+    def test_resolved_shell_executable_uses_override(self) -> None:
+        with mock.patch.dict("os.environ", {"PM_DAWN_SHELL": "/bin/sh"}, clear=False):
+            self.assertEqual("/bin/sh", implement_common.resolved_shell_executable())
+
+    def test_provider_timeout_seconds_falls_back_on_invalid_env(self) -> None:
+        with mock.patch.dict("os.environ", {"PM_DAWN_PROVIDER_TIMEOUT_SECONDS": "not-a-number"}, clear=False):
+            self.assertEqual(2.0, implement_common.provider_timeout_seconds())
+
+    def test_pi_runner_script_uses_resolved_shell_for_keepalive(self) -> None:
+        with mock.patch.object(implement_common, "resolved_shell_executable", return_value="/bin/sh"):
+            script = implement_common.pi_runner_script(
+                root=Path("/tmp/repo"),
+                session_dir=Path("/tmp/repo/.pm-dawn/pi"),
+                command="pi --print 'prompt'",
+            )
+        self.assertIn("exec /bin/sh -i", script)
 
 
 if __name__ == "__main__":
