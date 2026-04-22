@@ -338,7 +338,7 @@ def ensure_pm_dawn_ignored(
         suffix = "" if text.endswith("\n") or text == "" else "\n"
         gitignore.write_text(text + suffix + entry + "\n", encoding="utf-8")
         return {"status": "added_to_gitignore", "path": str(gitignore)}
-    if create_gitignore:
+    if create_gitignore and (root / ".git").exists():
         if dry_run:
             return {"status": "would_create_gitignore", "path": str(gitignore)}
         gitignore.write_text(entry + "\n", encoding="utf-8")

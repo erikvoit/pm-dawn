@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/banner.png" alt="PM Dawn banner" width="100%" alt="pm-dawn the agentic skill set set adrift on memory bliss"/>
+  <img src="assets/banner.png" width="100%" alt="pm-dawn the agentic skill set set adrift on memory bliss"/>
 </p>
 
 ## 🧠 Overview
