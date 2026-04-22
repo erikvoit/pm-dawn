@@ -42,7 +42,7 @@ PM Dawn sits in the middle as the **project manager**, enforcing boundaries, pre
 
 ## ⚡ Installation Quick Start
 
-Install PM Dawn into your skills directory and verify the core workflow commands run with plain `python`.
+Install PM Dawn into your skills directory, make the downstream agent available to your local harness, then use the workflow below to go from Jira epic to reviewed packet execution.
 
 ### Requirements
 
@@ -104,6 +104,36 @@ What this gives you:
 
 `.pm-dawn/` is durable for workflow state, but usually **ephemeral from a Git perspective**. By default, git should ignore it unless you explicitly decide to version those artifacts.
 
+### Quick Start Workflow
+
+Once PM Dawn is available to your frontier and local agentic harnesses, the happy path looks like this:
+
+1. Use `jira-epic-review` to review a Jira epic and write repo-local slice artifacts under `.pm-dawn/`.
+2. Use `epic-slice-plan` to refine that epic output into individual slices.
+3. Review those slices with a human in the loop if desired, and decide whether the boundaries and behavior are acceptable before moving on.
+4. Use `epic-slice-plan` again to packetize an approved slice into smaller implementation units for local-model execution.
+5. Use `epic-slice-implement` from the frontier agent to call the downstream local agent's `packet-implementation-plan` skill so the local harness can draft its own packet implementation plan.
+6. Review that packet plan with a human in the loop or continue fully agentically, depending on how much control you want at the review boundary.
+7. Launch implementation for the approved packet through `pi` or `opencode`.
+8. Observe and iterate on the persisted artifacts under `.pm-dawn/epics/<epic-key>/ops/`, `.pm-dawn/epics/<epic-key>/packets/`, and the related slice directories throughout the run.
+9. When a slice is complete, archive or delete the slice-specific artifacts to keep `.pm-dawn/` clean.
+
+See [Example Workflow](#-example-workflow) for a concrete end-to-end packet flow with the relevant skills called out by phase.
+
+In short:
+
+```text
+Review epic
+  -> refine slices
+  -> human review if needed
+  -> packetize slice
+  -> local packet plan
+  -> review brief
+  -> implement
+  -> review result
+  -> archive slice artifacts
+```
+
 ---
 
 ## 📚 Table of Contents
@@ -114,7 +144,7 @@ What this gives you:
 - [🧬 Terminology](#-terminology)
 - [📥 Inputs / 📤 Outputs (Contract)](#-inputs--outputs-contract)
 - [⚙️ Execution Model](#️-execution-model)
-- [🚀 Quick Example](#-quick-example)
+- [🚀 Example Workflow](#-example-workflow)
 - [🧩 Workflow Integration](#-workflow-integration)
 - [🧠 Behavioral Rules](#-behavioral-rules)
 - [📂 File System Semantics](#-file-system-semantics)
@@ -141,7 +171,7 @@ PM Dawn gives an agent a structured workflow for:
 Use PM Dawn when you have:
 
 - a Jira epic or story tree that needs to be reconciled with a real repo
-- work that should be split into reviewable implementation slices
+- work that should be split into reviewable implementation slices for a local model to execute
 - a plan-first workflow where one agent drafts and another reviews
 - a need for durable repo-local artifacts under `.pm-dawn/`
 
@@ -302,11 +332,13 @@ Important side effects:
 
 ---
 
-## 🚀 Quick Example
+## 🚀 Example Workflow
+
+In normal use, the agent will usually invoke these Python entrypoints for you through the relevant PM Dawn skill. The commands below are the concrete command surfaces behind that workflow, and are most useful when you want to inspect, debug, or manually drive a phase yourself.
 
 ### Example Invocation
 
-Turn a reviewed slice into packets:
+Refine a reviewed slice into packets with `epic-slice-plan`:
 
 ```bash
 python "epic-slice-plan/scripts/generate_slice_plan_artifacts.py" \
@@ -314,7 +346,7 @@ python "epic-slice-plan/scripts/generate_slice_plan_artifacts.py" \
   --repo-root .
 ```
 
-Generate a reviewed packet implementation brief:
+Generate a packet implementation draft with `epic-slice-implement` calling the downstream `packet-implementation-plan` skill:
 
 ```bash
 python "epic-slice-implement/scripts/generate_packet_implementation_plan.py" \
@@ -322,7 +354,7 @@ python "epic-slice-implement/scripts/generate_packet_implementation_plan.py" \
   --repo-root .
 ```
 
-Launch implementation from the reviewed brief:
+Launch implementation from the reviewed brief with `epic-slice-implement`:
 
 ```bash
 python "epic-slice-implement/scripts/launch_slice_session.py" \
@@ -335,6 +367,7 @@ python "epic-slice-implement/scripts/launch_slice_session.py" \
 ### Example Input
 
 ```text
+.pm-dawn/epics/RPVINF-124/index.md
 .pm-dawn/epics/RPVINF-124/slices/consumer_enablement_6.md
 .pm-dawn/epics/RPVINF-124/packets/consumer_enablement_6__01_contract.md
 ```
@@ -347,6 +380,14 @@ python "epic-slice-implement/scripts/launch_slice_session.py" \
 .pm-dawn/epics/RPVINF-124/ops/artifacts/consumer_enablement_6__01_contract.implementation-plan.md
 .pm-dawn/epics/RPVINF-124/ops/runs/consumer_enablement_6.json
 ```
+
+### Phase Map
+
+- Epic review phase: `jira-epic-review`
+- Slice refinement and packetization phase: `epic-slice-plan`
+- Packet plan draft phase: `epic-slice-implement` using the downstream `packet-implementation-plan` skill
+- Implementation phase: `epic-slice-implement`
+- PR and Jira sync phase: `jira-pr` and `slice-to-jira`
 
 ---
 
