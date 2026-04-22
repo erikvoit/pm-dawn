@@ -265,7 +265,17 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
                 session_dir=Path("/tmp/repo/.pm-dawn/pi"),
                 command="pi --print 'prompt'",
             )
+        self.assertIn("runner_exit=${PIPESTATUS[0]:-0};", script)
         self.assertIn("exec /bin/sh -i", script)
+
+    def test_pi_runner_script_uses_zsh_pipeline_status_when_shell_is_zsh(self) -> None:
+        with mock.patch.object(implement_common, "resolved_shell_executable", return_value="/bin/zsh"):
+            script = implement_common.pi_runner_script(
+                root=Path("/tmp/repo"),
+                session_dir=Path("/tmp/repo/.pm-dawn/pi"),
+                command="pi --print 'prompt'",
+            )
+        self.assertIn("runner_exit=${pipestatus[1]:-0};", script)
 
 
 if __name__ == "__main__":
