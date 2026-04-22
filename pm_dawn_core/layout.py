@@ -56,6 +56,98 @@ def slice_paths(root: Path, epic_key: str, group_id: str) -> SlicePaths:
     )
 
 
+def archive_root(root: Path) -> Path:
+    return pm_dawn_root(root) / "archive"
+
+
+def epic_archive_root(root: Path, epic_key: str) -> Path:
+    return archive_root(root) / epic_key
+
+
+def slice_archive_root(root: Path, epic_key: str, group_id: str) -> Path:
+    return epic_archive_root(root, epic_key) / group_id
+
+
+def handoffs_root(root: Path, epic_key: str) -> Path:
+    return ops_root(root, epic_key) / "handoffs"
+
+
+def artifacts_root(root: Path, epic_key: str) -> Path:
+    return ops_root(root, epic_key) / "artifacts"
+
+
+def runs_root(root: Path, epic_key: str) -> Path:
+    return ops_root(root, epic_key) / "runs"
+
+
+def pr_root(root: Path, epic_key: str) -> Path:
+    return ops_root(root, epic_key) / "pr"
+
+
+def slice_markdown_path(root: Path, epic_key: str, group_id: str) -> Path:
+    return slice_paths(root, epic_key, group_id).slice_md
+
+
+def slice_plan_path(root: Path, epic_key: str, group_id: str) -> Path:
+    return slice_paths(root, epic_key, group_id).plans_dir / f"{group_id}.plan.md"
+
+
 def packet_markdown_path(root: Path, epic_key: str, packet_id_value: str) -> Path:
     group_id = packet_id_value.split("__", 1)[0]
     return slice_paths(root, epic_key, group_id).packets_dir / f"{packet_id_value}.md"
+
+
+def compiled_packet_json_path(root: Path, epic_key: str, packet_id: str) -> Path:
+    return handoffs_root(root, epic_key) / f"{packet_id}.json"
+
+
+def implementation_plan_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
+    return artifacts_root(root, epic_key) / f"{packet_id}.implementation-plan.md"
+
+
+def legacy_opencode_plan_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
+    return artifacts_root(root, epic_key) / f"{packet_id}.opencode-plan.md"
+
+
+def reviewed_plan_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
+    preferred = implementation_plan_artifact_path(root, epic_key, packet_id)
+    if preferred.exists():
+        return preferred
+    return legacy_opencode_plan_artifact_path(root, epic_key, packet_id)
+
+
+def run_metadata_path(root: Path, epic_key: str, group_id: str) -> Path:
+    return runs_root(root, epic_key) / f"{group_id}.json"
+
+
+def run_artifact_path(root: Path, epic_key: str, group_id: str, kind: str) -> Path:
+    return runs_root(root, epic_key) / f"{group_id}.{kind}.md"
+
+
+def slice_artifact_targets(root: Path, epic_key: str, group_id: str) -> list[Path]:
+    epic_path = epic_root(root, epic_key)
+    targets: list[Path] = []
+    exact = [
+        slice_markdown_path(root, epic_key, group_id),
+        slice_plan_path(root, epic_key, group_id),
+        run_metadata_path(root, epic_key, group_id),
+        run_artifact_path(root, epic_key, group_id, "plan"),
+        run_artifact_path(root, epic_key, group_id, "result"),
+        pr_root(root, epic_key) / f"{group_id}.title.txt",
+        pr_root(root, epic_key) / f"{group_id}.body.md",
+        pr_root(root, epic_key) / f"{group_id}.verify.json",
+    ]
+    targets.extend(path for path in exact if path.exists())
+
+    glob_patterns = [
+        f"packets/{group_id}__*.md",
+        f"ops/handoffs/{group_id}__*.json",
+        f"ops/pr/{group_id}__*.title.txt",
+        f"ops/pr/{group_id}__*.body.md",
+        f"ops/pr/{group_id}__*.verify.json",
+        f"ops/artifacts/{group_id}__*",
+    ]
+    for pattern in glob_patterns:
+        targets.extend(path for path in epic_path.glob(pattern) if path.is_file())
+
+    return sorted(set(targets))

@@ -17,6 +17,16 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from pm_dawn_core.layout import (
+    compiled_packet_json_path,
+    implementation_plan_artifact_path,
+    legacy_opencode_plan_artifact_path,
+    packet_markdown_path,
+    reviewed_plan_artifact_path,
+    run_artifact_path,
+    run_metadata_path,
+    slice_markdown_path,
+)
 from pm_dawn_core.markdown import bullet_values, parse_markdown_sections, single_bullet
 from pm_dawn_core.profile import (
     load_project_profile as load_core_project_profile,
@@ -357,45 +367,6 @@ def check_active_harness_model(harness: str, model: str) -> dict:
     if harness == "pi":
         return check_active_pi_model(model)
     return check_active_opencode_model(model)
-
-
-def epic_root_path(root: Path, epic_key: str) -> Path:
-    return root / ".pm-dawn" / "epics" / epic_key
-
-
-def slice_markdown_path(root: Path, epic_key: str, group_id: str) -> Path:
-    return epic_root_path(root, epic_key) / "slices" / f"{group_id}.md"
-
-
-def packet_markdown_path(root: Path, epic_key: str, packet_id: str) -> Path:
-    return epic_root_path(root, epic_key) / "packets" / f"{packet_id}.md"
-
-
-def compiled_packet_json_path(root: Path, epic_key: str, packet_id: str) -> Path:
-    return epic_root_path(root, epic_key) / "ops" / "handoffs" / f"{packet_id}.json"
-
-
-def implementation_plan_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
-    return epic_root_path(root, epic_key) / "ops" / "artifacts" / f"{packet_id}.implementation-plan.md"
-
-
-def legacy_opencode_plan_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
-    return epic_root_path(root, epic_key) / "ops" / "artifacts" / f"{packet_id}.opencode-plan.md"
-
-
-def reviewed_plan_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
-    preferred = implementation_plan_artifact_path(root, epic_key, packet_id)
-    if preferred.exists():
-        return preferred
-    return legacy_opencode_plan_artifact_path(root, epic_key, packet_id)
-
-
-def run_metadata_path(root: Path, epic_key: str, group_id: str) -> Path:
-    return epic_root_path(root, epic_key) / "ops" / "runs" / f"{group_id}.json"
-
-
-def run_artifact_path(root: Path, epic_key: str, group_id: str, kind: str) -> Path:
-    return epic_root_path(root, epic_key) / "ops" / "runs" / f"{group_id}.{kind}.md"
 
 
 def read_json(path: Path) -> dict:
