@@ -38,8 +38,6 @@ This enables a split-brain workflow:
 
 PM Dawn sits in the middle as the **project manager**, enforcing boundaries, preserving context, and ensuring planning and execution stay aligned through durable, repo-local artifacts under `.pm-dawn/`.
 
-`.pm-dawn/` is durable for workflow state, but usually **ephemeral from a Git perspective**. By default, git should ignore it unless you explicitly decide to version those artifacts.
-
 ---
 
 ## ⚡ Installation Quick Start
@@ -103,6 +101,8 @@ What this gives you:
 - default Git protection for `.pm-dawn/` unless you opt out
 - canonical PM Dawn command surfaces available from the installed skill directory
 - validation that the repo can execute the core PM Dawn workflow
+
+`.pm-dawn/` is durable for workflow state, but usually **ephemeral from a Git perspective**. By default, git should ignore it unless you explicitly decide to version those artifacts.
 
 ---
 
