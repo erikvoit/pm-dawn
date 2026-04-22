@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -156,8 +157,7 @@ def render_implement_command(
     root = repo_root(root)
     script_path = root / implement_command_relative_script_path(command)
     relative = script_path.relative_to(root)
-    rendered = [python_executable, f'"{relative.as_posix()}"', *args]
-    return " ".join(rendered)
+    return shlex.join([python_executable, relative.as_posix(), *args])
 
 
 DEFAULT_PROJECT_PROFILE: dict = make_default_profile(

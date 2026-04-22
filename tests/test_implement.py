@@ -211,13 +211,33 @@ class TestImplementHelpers(unittest.TestCase):
             )
 
             self.assertEqual(
-                'python3 "epic-slice-implement/scripts/mark_slice_pending_review.py" '
+                "python3 epic-slice-implement/scripts/mark_slice_pending_review.py "
                 "RPVINF-124 consumer_enablement_5 --repo-root .",
                 command,
             )
             self.assertEqual(
                 Path("epic-slice-implement/scripts/mark_slice_pending_review.py"),
                 implement_command_relative_script_path("pending-review"),
+            )
+
+    def test_render_implement_command_quotes_arguments_with_spaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            command = render_implement_command(
+                root,
+                "plan",
+                "RPVINF-124",
+                "consumer_enablement_5",
+                "consumer_enablement_5__02_wiring",
+                "--title",
+                "packet plan with spaces",
+            )
+
+            self.assertEqual(
+                "python epic-slice-implement/scripts/generate_packet_implementation_plan.py "
+                "RPVINF-124 consumer_enablement_5 consumer_enablement_5__02_wiring "
+                "--title 'packet plan with spaces'",
+                command,
             )
 
     def test_load_execution_input_reads_slice_markdown(self) -> None:
@@ -348,7 +368,7 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertIn("approved plan", prompt)
             self.assertIn("reviewed and corrected implementation brief", prompt)
             self.assertIn("feature/RPVINF-128-consumer-enablement", prompt)
-            self.assertIn('python3 "epic-slice-implement/scripts/mark_slice_pending_review.py"', prompt)
+            self.assertIn("python3 epic-slice-implement/scripts/mark_slice_pending_review.py", prompt)
             self.assertIn("epic-slice-implement/scripts/mark_slice_pending_review.py", prompt)
             self.assertIn("--repo-root .", prompt)
 

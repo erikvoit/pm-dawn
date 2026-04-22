@@ -245,11 +245,13 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
 
             payload = json.loads(result.stdout)
             self.assertEqual(
-                'python "epic-slice-implement/scripts/load_handoff.py" <epic-key> <group-id> --repo-root .',
+                "python epic-slice-implement/scripts/load_handoff.py "
+                "'<epic-key>' '<group-id>' --repo-root .",
                 payload["recommended_commands"]["load_handoff"],
             )
             self.assertEqual(
-                'python "epic-slice-implement/scripts/launch_slice_session.py" <epic-key> <group-id> --repo-root .',
+                "python epic-slice-implement/scripts/launch_slice_session.py "
+                "'<epic-key>' '<group-id>' --repo-root .",
                 payload["recommended_commands"]["launch"],
             )
 
