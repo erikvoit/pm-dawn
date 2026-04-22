@@ -7,6 +7,10 @@ import unittest
 from pathlib import Path
 
 from pm_dawn_core.layout import (
+    run_artifact_path,
+    run_metadata_path,
+    slice_archive_root,
+    slice_artifact_targets,
     epic_root,
     epics_root,
     ops_root,
@@ -60,6 +64,73 @@ class TestProjectProfilePath(unittest.TestCase):
             profile = project_profile_path(root)
             expected = root / ".pm-dawn" / "project-profile.toml"
             self.assertEqual(expected.resolve(), profile.resolve())
+
+
+class TestLifecycleLayoutHelpers(unittest.TestCase):
+    def test_slice_archive_root_points_to_slice_archive_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            archive = slice_archive_root(root, "RPVINF-124", "consumer_enablement_3")
+            expected = root / ".pm-dawn" / "archive" / "RPVINF-124" / "consumer_enablement_3"
+            self.assertEqual(expected.resolve(), archive.resolve())
+
+    def test_run_paths_point_to_slice_run_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            metadata = run_metadata_path(root, "RPVINF-124", "consumer_enablement_3")
+            plan_artifact = run_artifact_path(root, "RPVINF-124", "consumer_enablement_3", "plan")
+            result_artifact = run_artifact_path(root, "RPVINF-124", "consumer_enablement_3", "result")
+            self.assertEqual(
+                (root / ".pm-dawn" / "epics" / "RPVINF-124" / "ops" / "runs" / "consumer_enablement_3.json").resolve(),
+                metadata.resolve(),
+            )
+            self.assertEqual(
+                (root / ".pm-dawn" / "epics" / "RPVINF-124" / "ops" / "runs" / "consumer_enablement_3.plan.md").resolve(),
+                plan_artifact.resolve(),
+            )
+            self.assertEqual(
+                (root / ".pm-dawn" / "epics" / "RPVINF-124" / "ops" / "runs" / "consumer_enablement_3.result.md").resolve(),
+                result_artifact.resolve(),
+            )
+
+    def test_slice_artifact_targets_collect_exact_and_globbed_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            epic_root_path = root / ".pm-dawn" / "epics" / "RPVINF-124"
+            for relative in (
+                "slices/consumer_enablement_3.md",
+                "plans/consumer_enablement_3.plan.md",
+                "ops/runs/consumer_enablement_3.json",
+                "ops/runs/consumer_enablement_3.plan.md",
+                "ops/runs/consumer_enablement_3.result.md",
+                "ops/pr/consumer_enablement_3.title.txt",
+                "ops/pr/consumer_enablement_3.body.md",
+                "ops/pr/consumer_enablement_3.verify.json",
+                "packets/consumer_enablement_3__01_contract.md",
+                "ops/handoffs/consumer_enablement_3__01_contract.json",
+                "ops/pr/consumer_enablement_3__01_contract.title.txt",
+                "ops/pr/consumer_enablement_3__01_contract.body.md",
+                "ops/pr/consumer_enablement_3__01_contract.verify.json",
+                "ops/artifacts/consumer_enablement_3__01_contract.implementation-plan.md",
+            ):
+                path = epic_root_path / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+
+            targets = slice_artifact_targets(root, "RPVINF-124", "consumer_enablement_3")
+
+            self.assertEqual(14, len(targets))
+            self.assertEqual(sorted(targets), targets)
+            self.assertEqual(len(targets), len(set(targets)))
+            self.assertIn((epic_root_path / "slices" / "consumer_enablement_3.md").resolve(), targets)
+            self.assertIn(
+                (epic_root_path / "ops" / "artifacts" / "consumer_enablement_3__01_contract.implementation-plan.md").resolve(),
+                targets,
+            )
+            self.assertNotIn(
+                (epic_root_path / "ops" / "handoffs" / "other_slice__01_contract.json").resolve(),
+                targets,
+            )
 
 
 if __name__ == "__main__":
