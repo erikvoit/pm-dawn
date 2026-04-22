@@ -13,6 +13,7 @@ from pathlib import Path
 from pm_dawn_core.implement import (
     build_launch_prompt,
     build_steer_prompt,
+    compile_packet_handoff,
     load_execution_input,
     resolve_agent_harness,
     resolve_harness_model,
@@ -98,6 +99,64 @@ PACKET_JSON = {
     "routing_notes": ["Keep harness adapters provider-specific."],
 }
 
+PACKET_MARKDOWN = textwrap.dedent(
+    """\
+    # RPVINF-124 / consumer_enablement_4__01_contract
+
+    Packet ID:
+    - consumer_enablement_4__01_contract
+
+    Goal:
+    - Extract the shared execution-input contract needed by epic-slice-implement.
+
+    Why This Packet Is Isolated:
+    - Packet type: contract
+    - This packet is intentionally narrow and should not re-decide architecture.
+
+    Depends On:
+    - None
+
+    Files to Read:
+    - pm_dawn_core/implement.py
+    - epic-slice-implement/scripts/common.py
+
+    Files to Change:
+    - pm_dawn_core/implement.py
+    - epic-slice-implement/scripts/common.py
+
+    Implementation Steps:
+    - Extract shared execution-input helpers.
+
+    Validation Steps:
+    - Run focused tests.
+
+    Acceptance Checks:
+    - Contract packet changes are limited to the declared files.
+    - All packet validation steps pass.
+
+    Constraints:
+    - Do not widen scope beyond the approved slice plan.
+
+    Open Questions:
+    - None
+
+    Execution Routing:
+    - Risk Class: architectural
+    - Recommended Executor: direct_or_strong_model
+    - Keep harness adapters provider-specific.
+
+    Branch Recommendation:
+    - feature/RPVINF-128-consumer-enablement
+
+    Commit Scope Guidance:
+    - Use a commit focused on the contract packet and reference RPVINF-128.
+
+    Jira Traceability:
+    - Primary: RPVINF-128
+    - Additional: None
+    """
+)
+
 
 def write_file(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -110,23 +169,12 @@ def build_repo_fixture(root: Path) -> None:
         SLICE_MARKDOWN,
     )
     write_file(
-        root / ".pm-dawn" / "epics" / "RPVINF-124" / "ops" / "handoffs" / "consumer_enablement_4__01_contract.json",
-        json.dumps(PACKET_JSON, indent=2) + "\n",
+        root / ".pm-dawn" / "epics" / "RPVINF-124" / "packets" / "consumer_enablement_4__01_contract.md",
+        PACKET_MARKDOWN,
     )
     write_file(
         root / ".pm-dawn" / "epics" / "RPVINF-124" / "ops" / "artifacts" / "consumer_enablement_4__01_contract.implementation-plan.md",
         "# reviewed plan\n",
-    )
-    write_file(
-        root / "epic-slice-plan" / "scripts" / "compile_packet_markdown.py",
-        textwrap.dedent(
-            """\
-            #!/usr/bin/env python3
-            import sys
-
-            raise SystemExit(0)
-            """
-        ),
     )
 
 
@@ -158,6 +206,25 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertEqual("consumer_enablement_4__01_contract", handoff["packet_id"])
             self.assertEqual("contract", handoff["packet_type"])
             self.assertTrue(str(path).endswith("consumer_enablement_4__01_contract.json"))
+
+    def test_compile_packet_handoff_builds_json_from_packet_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+
+            handoff, path = compile_packet_handoff(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4",
+                "consumer_enablement_4__01_contract",
+            )
+
+            self.assertEqual(PACKET_JSON["primary_issue"], handoff["primary_issue"])
+            self.assertEqual(
+                PACKET_JSON["source_context"]["implementation_group_reason"],
+                handoff["source_context"]["implementation_group_reason"],
+            )
+            self.assertTrue(path.exists())
 
     def test_resolve_agent_harness_and_model_use_project_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -240,6 +307,7 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertIn("approved plan", prompt)
             self.assertIn("reviewed and corrected implementation brief", prompt)
             self.assertIn("feature/RPVINF-128-consumer-enablement", prompt)
+            self.assertIn("epic-slice-implement/scripts/mark_slice_pending_review.py", prompt)
 
     def test_build_steer_prompt_references_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

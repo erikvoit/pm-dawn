@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from .markdown import parse_slice_markdown
+from .markdown import parse_packet_markdown, parse_slice_markdown
 from .profile import (
     load_project_profile as load_core_project_profile,
     make_default_profile,
@@ -169,27 +169,60 @@ def load_handoff(root: Path, epic_key: str, group_id: str) -> tuple[dict, Path]:
     return data, path
 
 
+def compile_packet_handoff(root: Path, epic_key: str, group_id: str, packet_id: str) -> tuple[dict, Path]:
+    handoff, _handoff_path = load_handoff(root, epic_key, group_id)
+    packet_path = packet_markdown_path(root, epic_key, packet_id)
+    packet = parse_packet_markdown(packet_path)
+    if packet["packet_id"] != packet_id:
+        raise RuntimeError(f"packet Markdown id mismatch: expected {packet_id}, found {packet['packet_id']}")
+
+    payload = {
+        "schema_version": "v1",
+        "epic_key": epic_key,
+        "group_id": group_id,
+        "packet_id": packet_id,
+        "packet_type": packet["packet_type"],
+        "risk_class": packet["risk_class"],
+        "recommended_executor": packet["recommended_executor"],
+        "routing_notes": packet["routing_notes"],
+        "primary_issue": packet["primary_issue"] or handoff["primary_issue"],
+        "secondary_issues": packet["secondary_issues"] or handoff.get("secondary_issues", []),
+        "goal": packet["goal"] or handoff["goal"],
+        "branch_name": packet["branch_name"] or handoff["branch_name"],
+        "pr_traceability": handoff["pr_traceability"],
+        "entry_criteria": handoff["entry_criteria"],
+        "exit_criteria": handoff["exit_criteria"],
+        "repo_surfaces": handoff["repo_surfaces"],
+        "implementation_steps": packet["implementation_steps"],
+        "validation_steps": packet["validation_steps"] or handoff["validation_steps"],
+        "risks": handoff.get("risks", []),
+        "open_questions": packet["open_questions"],
+        "source_context": {
+            **handoff["source_context"],
+            "packet_markdown": str(packet_path),
+            "compiled_from": "packet_markdown",
+            "depends_on": packet["depends_on"],
+            "files_to_read": packet["files_to_read"],
+            "files_to_change": packet["files_to_change"],
+            "acceptance_checks": packet["acceptance_checks"],
+            "constraints": packet["constraints"],
+            "commit_scope_guidance": packet["commit_scope_guidance"],
+            "risk_class": packet["risk_class"],
+            "recommended_executor": packet["recommended_executor"],
+            "routing_notes": packet["routing_notes"],
+        },
+    }
+    output_path = compiled_packet_json_path(root, epic_key, packet_id)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload, output_path
+
+
 def load_execution_input(root: Path, epic_key: str, group_id: str, packet_id: str | None = None) -> tuple[dict, Path]:
     root = repo_root(root)
     if not packet_id:
         return load_handoff(root, epic_key, group_id)
-    output_path = compiled_packet_json_path(root, epic_key, packet_id)
-    compile_script = root / "epic-slice-plan" / "scripts" / "compile_packet_markdown.py"
-    cmd = [
-        sys.executable,
-        str(compile_script),
-        epic_key,
-        group_id,
-        packet_id,
-        "--repo-root",
-        str(root),
-        "--output",
-        str(output_path),
-    ]
-    proc = __import__("subprocess").run(cmd, check=False, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"command failed: {' '.join(cmd)}")
-    data = json.loads(output_path.read_text(encoding="utf-8"))
+    data, output_path = compile_packet_handoff(root, epic_key, group_id, packet_id)
     validate_handoff(data)
     return data, output_path
 
@@ -224,6 +257,7 @@ def build_launch_prompt(
     repo_name = root.name
     validation_command = full_suite_command(root)
     secondary = ", ".join(handoff.get("secondary_issues", [])) or "none"
+    pending_review_script = root / "epic-slice-implement" / "scripts" / "mark_slice_pending_review.py"
     if phase == "planning":
         return f"""Read and follow AGENTS.md and CONTRIBUTING.md before making changes.
 
@@ -326,7 +360,7 @@ At the end, summarize:
 - any remaining risks or blockers
 
 If you believe the implementation pass is complete and ready for human review, as your final step run:
-- python "/Users/evo/.codex/skills/epic-slice-implement/scripts/mark_slice_pending_review.py" {handoff['epic_key']} {handoff['group_id']} --repo-root {root}
+- {sys.executable} "{pending_review_script}" {handoff['epic_key']} {handoff['group_id']} --repo-root {root}
 
 Use that only to mark worker state as pending review.
 Do not mark the packet completed in metadata; reviewer acceptance is separate.

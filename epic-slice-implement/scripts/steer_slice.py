@@ -6,16 +6,20 @@ import json
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from common import (
     attach_instructions,
     build_steer_prompt,
     emit_json,
     parse_slice_markdown,
     read_json,
-    repo_root,
     run_cmd,
-    run_metadata_path,
 )
+from pm_dawn_core.layout import run_metadata_path
+from pm_dawn_core.profile import repo_root
 
 
 def parse_args() -> argparse.Namespace:

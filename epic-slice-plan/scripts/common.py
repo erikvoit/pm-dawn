@@ -5,14 +5,20 @@ import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pm_dawn_core.markdown import bullet_values, parse_markdown_sections, single_bullet
+from pm_dawn_core.layout import SlicePaths, packet_markdown_path, slice_paths
+from pm_dawn_core.markdown import (
+    bullet_values,
+    parse_markdown_sections,
+    parse_packet_markdown,
+    parse_plan_markdown,
+    single_bullet,
+)
 from pm_dawn_core.profile import (
     classify_path_fallback,
     load_project_profile as load_core_project_profile,
@@ -119,19 +125,6 @@ DEFAULT_PROJECT_PROFILE: dict = make_default_profile(
 )
 
 
-@dataclass(frozen=True)
-class SlicePaths:
-    root: Path
-    epic_root: Path
-    index_md: Path
-    slice_md: Path
-    ops_dir: Path
-    plans_dir: Path
-    packets_dir: Path
-    handoffs_dir: Path
-    artifacts_dir: Path
-
-
 def emit_json(payload: object) -> None:
     json.dump(payload, sys.stdout, indent=2, sort_keys=True)
     sys.stdout.write("\n")
@@ -139,24 +132,6 @@ def emit_json(payload: object) -> None:
 
 def load_project_profile(root: Path) -> dict:
     return load_core_project_profile(root, DEFAULT_PROJECT_PROFILE)
-
-
-def slice_paths(root: Path, epic_key: str, group_id: str) -> SlicePaths:
-    epic_root = root / ".pm-dawn" / "epics" / epic_key
-    ops_dir = epic_root / "ops"
-    return SlicePaths(
-        root=root,
-        epic_root=epic_root,
-        index_md=epic_root / "index.md",
-        slice_md=epic_root / "slices" / f"{group_id}.md",
-        ops_dir=ops_dir,
-        plans_dir=epic_root / "plans",
-        packets_dir=epic_root / "packets",
-        handoffs_dir=ops_dir / "handoffs",
-        artifacts_dir=ops_dir / "artifacts",
-    )
-
-
 def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -416,93 +391,3 @@ def list_lines(items: list[str], default: str = "- None") -> str:
     if not items:
         return default
     return "\n".join(f"- {item}" for item in items)
-
-
-def packet_markdown_path(root: Path, epic_key: str, packet_id_value: str) -> Path:
-    group_id = packet_id_value.split("__", 1)[0]
-    return slice_paths(root, epic_key, group_id).packets_dir / f"{packet_id_value}.md"
-
-
-def parse_packet_markdown(path: Path) -> dict:
-    if not path.exists():
-        raise RuntimeError(f"packet Markdown not found: {path}")
-    markdown = path.read_text(encoding="utf-8")
-    title, sections = parse_markdown_sections(markdown)
-    packet_id_value = single_bullet(sections.get("Packet ID", []))
-    packet_type = ""
-    for item in bullet_values(sections.get("Why This Packet Is Isolated", [])):
-        if item.lower().startswith("packet type:"):
-            packet_type = item.split(":", 1)[1].strip().lower()
-            break
-    primary_issue = ""
-    secondary_issues: list[str] = []
-    for item in bullet_values(sections.get("Jira Traceability", [])):
-        if item.startswith("Primary:"):
-            primary_issue = item.split(":", 1)[1].strip()
-        elif item.startswith("Additional:"):
-            extra = item.split(":", 1)[1].strip()
-            if extra and extra != "None":
-                secondary_issues = [piece.strip() for piece in extra.split(",") if piece.strip()]
-    branch_name = single_bullet(sections.get("Branch Recommendation", []))
-    commit_scope_guidance = single_bullet(sections.get("Commit Scope Guidance", []))
-    open_questions = bullet_values(sections.get("Open Questions", []))
-    if open_questions == ["None"]:
-        open_questions = []
-    risk_class = ""
-    recommended_executor = ""
-    routing_notes: list[str] = []
-    for item in bullet_values(sections.get("Execution Routing", [])):
-        if item.startswith("Risk Class:"):
-            risk_class = item.split(":", 1)[1].strip()
-        elif item.startswith("Recommended Executor:"):
-            recommended_executor = item.split(":", 1)[1].strip()
-        else:
-            routing_notes.append(item)
-    return {
-        "title": title,
-        "packet_id": packet_id_value,
-        "goal": single_bullet(sections.get("Goal", [])),
-        "packet_type": packet_type,
-        "depends_on": [] if bullet_values(sections.get("Depends On", [])) == ["None"] else bullet_values(sections.get("Depends On", [])),
-        "files_to_read": [] if bullet_values(sections.get("Files to Read", [])) == ["None"] else bullet_values(sections.get("Files to Read", [])),
-        "files_to_change": [] if bullet_values(sections.get("Files to Change", [])) == ["None"] else bullet_values(sections.get("Files to Change", [])),
-        "implementation_steps": [] if bullet_values(sections.get("Implementation Steps", [])) == ["None"] else bullet_values(sections.get("Implementation Steps", [])),
-        "validation_steps": [] if bullet_values(sections.get("Validation Steps", [])) == ["None"] else bullet_values(sections.get("Validation Steps", [])),
-        "acceptance_checks": [] if bullet_values(sections.get("Acceptance Checks", [])) == ["None"] else bullet_values(sections.get("Acceptance Checks", [])),
-        "constraints": [] if bullet_values(sections.get("Constraints", [])) == ["None"] else bullet_values(sections.get("Constraints", [])),
-        "primary_issue": primary_issue,
-        "secondary_issues": secondary_issues,
-        "branch_name": branch_name,
-        "commit_scope_guidance": commit_scope_guidance,
-        "open_questions": open_questions,
-        "risk_class": risk_class,
-        "recommended_executor": recommended_executor,
-        "routing_notes": routing_notes,
-    }
-
-
-def parse_plan_markdown(path: Path) -> dict:
-    if not path.exists():
-        raise RuntimeError(f"plan Markdown not found: {path}")
-    markdown = path.read_text(encoding="utf-8")
-    title, sections = parse_markdown_sections(markdown)
-    packet_breakdown = bullet_values(sections.get("Packet Breakdown", []))
-    packets: list[dict[str, str]] = []
-    for item in packet_breakdown:
-        packet_name, _sep, goal = item.partition(":")
-        packets.append({"packet_id": packet_name.strip(), "goal": goal.strip()})
-    packet_order = [] if bullet_values(sections.get("Packet Ordering", [])) == ["None"] else bullet_values(sections.get("Packet Ordering", []))
-    return {
-        "title": title,
-        "slice_identity": bullet_values(sections.get("Slice Identity", [])),
-        "goal": single_bullet(sections.get("Goal", [])),
-        "approved_approach": [] if bullet_values(sections.get("Approved Implementation Approach", [])) == ["None"] else bullet_values(sections.get("Approved Implementation Approach", [])),
-        "files_to_change": [] if bullet_values(sections.get("Files Likely to Change", [])) == ["None"] else bullet_values(sections.get("Files Likely to Change", [])),
-        "files_not_to_change": [] if bullet_values(sections.get("Files Explicitly Not to Change", [])) == ["None"] else bullet_values(sections.get("Files Explicitly Not to Change", [])),
-        "validation_strategy": [] if bullet_values(sections.get("Validation Strategy", [])) == ["None"] else bullet_values(sections.get("Validation Strategy", [])),
-        "risks": [] if bullet_values(sections.get("Risks and Constraints", [])) == ["None"] else bullet_values(sections.get("Risks and Constraints", [])),
-        "open_questions": [] if bullet_values(sections.get("Open Questions", [])) == ["None"] else bullet_values(sections.get("Open Questions", [])),
-        "packets": packets,
-        "packet_order": packet_order,
-        "source_context": bullet_values(sections.get("Source Context", [])),
-    }

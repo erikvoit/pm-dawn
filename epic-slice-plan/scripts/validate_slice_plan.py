@@ -2,8 +2,17 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+import sys
 
-from common import emit_json, parse_packet_markdown, parse_plan_markdown, repo_root, slice_paths
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from pm_dawn_core.layout import slice_paths
+from pm_dawn_core.markdown import parse_packet_markdown, parse_plan_markdown
+
+from common import emit_json, repo_root
 
 
 REQUIRED_PLAN_FIELDS = {

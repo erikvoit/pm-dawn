@@ -9,7 +9,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from common import emit_json, repo_root
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from common import emit_json
+from pm_dawn_core.layout import epics_root, run_metadata_path, slice_markdown_path, slice_plan_path
+from pm_dawn_core.profile import repo_root
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,19 +29,18 @@ def parse_args() -> argparse.Namespace:
 
 
 def _find_matches(root: Path, group_id: str, epic_key: str | None) -> list[str]:
-    epics_root = root / ".pm-dawn" / "epics"
-    if not epics_root.exists():
+    epics_path = epics_root(root)
+    if not epics_path.exists():
         return []
-    epics = [epic_key] if epic_key else [path.name for path in epics_root.iterdir() if path.is_dir()]
+    epics = [epic_key] if epic_key else [path.name for path in epics_path.iterdir() if path.is_dir()]
     matches: list[str] = []
     for epic in epics:
-        epic_root = epics_root / epic
-        if not epic_root.exists():
+        if not (epics_path / epic).exists():
             continue
         candidates = [
-            epic_root / "slices" / f"{group_id}.md",
-            epic_root / "plans" / f"{group_id}.plan.md",
-            epic_root / "ops" / "runs" / f"{group_id}.json",
+            slice_markdown_path(root, epic, group_id),
+            slice_plan_path(root, epic, group_id),
+            run_metadata_path(root, epic, group_id),
         ]
         if any(path.exists() for path in candidates):
             matches.append(epic)

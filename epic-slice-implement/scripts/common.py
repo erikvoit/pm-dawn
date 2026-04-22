@@ -20,19 +20,22 @@ if str(ROOT) not in sys.path:
 from pm_dawn_core.implement import (
     build_launch_prompt,
     build_steer_prompt,
-    compiled_packet_json_path,
-    implementation_plan_artifact_path,
-    legacy_opencode_plan_artifact_path,
     load_execution_input,
-    packet_markdown_path,
-    parse_slice_markdown,
     resolve_agent_harness,
     resolve_approved_plan_path,
     resolve_harness_model,
 )
-from pm_dawn_core.profile import (
-    repo_root,
+from pm_dawn_core.layout import (
+    compiled_packet_json_path,
+    implementation_plan_artifact_path,
+    legacy_opencode_plan_artifact_path,
+    packet_markdown_path,
+    reviewed_plan_artifact_path,
+    run_artifact_path,
+    run_metadata_path,
+    slice_markdown_path,
 )
+from pm_dawn_core.profile import repo_root
 
 
 def emit_json(payload: object) -> None:
@@ -227,14 +230,6 @@ def check_active_harness_model(harness: str, model: str) -> dict:
     if harness == "pi":
         return check_active_pi_model(model)
     return check_active_opencode_model(model)
-
-
-def run_metadata_path(root: Path, epic_key: str, group_id: str) -> Path:
-    return repo_root(root) / ".pm-dawn" / "epics" / epic_key / "ops" / "runs" / f"{group_id}.json"
-
-
-def run_artifact_path(root: Path, epic_key: str, group_id: str, kind: str) -> Path:
-    return repo_root(root) / ".pm-dawn" / "epics" / epic_key / "ops" / "runs" / f"{group_id}.{kind}.md"
 
 
 def read_json(path: Path) -> dict:

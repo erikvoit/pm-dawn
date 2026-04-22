@@ -2,7 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from common import (
     emit_json,
@@ -12,14 +17,13 @@ from common import (
     now_iso,
     read_json,
     render_phase_artifact,
-    repo_root,
-    run_artifact_path,
-    run_metadata_path,
     session_completion_state,
     session_runtime_status,
     write_json,
     write_text,
 )
+from pm_dawn_core.layout import run_artifact_path, run_metadata_path
+from pm_dawn_core.profile import repo_root
 
 
 def parse_args() -> argparse.Namespace:
