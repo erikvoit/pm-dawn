@@ -405,13 +405,20 @@ def pi_runner_script(*, root: Path, session_dir: Path, command: str) -> str:
     console_log = pi_console_log_path(session_dir)
     shell_executable = resolved_shell_executable()
     shell_path = shlex.quote(shell_executable)
-    status_var = "pipestatus[1]" if "zsh" in Path(shell_executable).name.lower() else "PIPESTATUS[0]"
+    shell_name = Path(shell_executable).name.lower()
+    if "zsh" in shell_name:
+        status_capture = 'runner_exit=${pipestatus[1]:-0}; '
+    elif "bash" in shell_name:
+        status_capture = 'runner_exit=${PIPESTATUS[0]:-0}; '
+    else:
+        # Generic POSIX shells do not expose pipeline segment statuses.
+        status_capture = 'runner_exit=${?:-0}; '
     return (
         f"cd {shlex.quote(str(root))} && "
         f"mkdir -p {shlex.quote(str(session_dir))} && "
         "export PYTHONUNBUFFERED=1 && "
         f"{{ {command}; }} 2>&1 | tee -a {shlex.quote(str(console_log))}; "
-        f"runner_exit=${{{status_var}:-0}}; "
+        f"{status_capture}"
         'printf "\\n[pm-dawn] runner exited with status %s\\n" "$runner_exit"; '
         f"exec {shell_path} -i"
     )
