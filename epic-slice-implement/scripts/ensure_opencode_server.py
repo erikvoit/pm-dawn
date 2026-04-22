@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import time
 
-from common import emit_json, opencode_server_session_name, repo_root, run_cmd, tmux_has_session
+from common import emit_json, opencode_server_session_name, repo_root, require_cli, run_cmd, tmux_has_session
 
 
 def parse_args() -> argparse.Namespace:
@@ -18,6 +18,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     root = repo_root(args.repo_root)
+    require_cli("opencode")
     session_name = opencode_server_session_name(root)
     server_url = f"http://{args.hostname}:{args.port}"
 

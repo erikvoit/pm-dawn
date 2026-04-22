@@ -119,10 +119,31 @@ def classify_risk(packet_type: str, files_to_change: list[str], handoff: dict, p
     )
 
 
+def should_add_tests_packet(plan: dict, handoff: dict) -> bool:
+    if plan.get("files_to_change") == ["tests/"]:
+        return False
+
+    non_test_files = [path for path in plan.get("files_to_change", []) if not path.startswith("tests/")]
+    if not non_test_files:
+        return False
+
+    text = " ".join(
+        [
+            handoff.get("goal", ""),
+            " ".join(handoff.get("implementation_steps", [])),
+            " ".join(plan.get("validation_strategy", [])),
+        ]
+    ).lower()
+    return any(token in text for token in ("test", "validate", "verification", "smoke"))
+
+
 def build_packets(plan: dict, handoff: dict, profile: dict) -> list[dict]:
     grouped: dict[str, list[str]] = {"contract": [], "wiring": [], "tests": [], "cleanup": []}
     for path in plan.get("files_to_change", []):
         grouped[classify_repo_path(path, profile)].append(path)
+
+    if not grouped["tests"] and should_add_tests_packet(plan, handoff):
+        grouped["tests"] = ["tests/"]
 
     if (
         grouped["tests"]

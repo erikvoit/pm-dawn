@@ -11,6 +11,7 @@ from common import (
     launch_tmux_session_with_tail,
     pi_runner_script,
     pi_tail_script,
+    require_cli,
     run_cmd,
     tmux_has_session,
     write_text,
@@ -89,6 +90,7 @@ def run_packet_planning(
     session_dir: Path,
     timeout_seconds: int = 300,
 ) -> None:
+    require_cli("pi")
     session_dir.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
         output_path.unlink()

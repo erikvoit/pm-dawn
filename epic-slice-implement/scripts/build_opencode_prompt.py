@@ -5,7 +5,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from common import build_launch_prompt, build_steer_prompt, load_execution_input, repo_root
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from pm_dawn_core.implement import build_launch_prompt, build_steer_prompt, load_execution_input
+from pm_dawn_core.profile import repo_root
 
 
 def parse_args() -> argparse.Namespace:

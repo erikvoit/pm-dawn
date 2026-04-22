@@ -67,7 +67,7 @@ def classify_path_fallback(path: str) -> str:
 
     if lower.startswith("tests/") or "/tests/" in lower or basename.startswith("test_"):
         return "tests"
-    if basename in {"common.py", "profile.py", "layout.py", "markdown.py", "bootstrap.py"}:
+    if basename in {"common.py", "profile.py", "layout.py", "markdown.py", "bootstrap.py", "implement.py"}:
         return "contract"
     if any(token in basename for token in ("schema", "protocol", "contract")):
         return "contract"

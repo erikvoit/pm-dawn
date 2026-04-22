@@ -78,6 +78,8 @@ def main() -> None:
     errors: list[str] = []
     if not packets:
         errors.append("no packet Markdown artifacts found")
+    if not plan.get("files_to_change"):
+        errors.append("plan Markdown has no Files Likely to Change entries")
     if plan.get("packet_order") and plan.get("packet_order") != [packet["packet_id"] for packet in packets]:
         errors.append("packet ordering in plan Markdown does not match the packet artifacts on disk")
     if [packet["packet_id"] for packet in plan.get("packets", [])] != [packet["packet_id"] for packet in packets]:
