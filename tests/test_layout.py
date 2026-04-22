@@ -193,8 +193,6 @@ class TestLifecycleLayoutHelpers(unittest.TestCase):
                 (epic_root_path / "ops" / "handoffs" / "other_slice__01_contract.json").resolve(),
                 targets,
             )
-
-
 class TestPacketMarkdownPath(unittest.TestCase):
     def test_packet_markdown_path_returns_correct_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
