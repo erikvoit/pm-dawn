@@ -40,6 +40,9 @@ COORDINATE_PLAN_REVIEW = (
 MIGRATE_PM_DAWN_LAYOUT = (
     REPO_ROOT / "epic-slice-implement" / "scripts" / "migrate_pm_dawn_layout.py"
 )
+LAUNCH_SLICE_SESSION = (
+    REPO_ROOT / "epic-slice-implement" / "scripts" / "launch_slice_session.py"
+)
 
 
 def write_fixture(path: Path, content: str = "fixture\n") -> None:
@@ -364,6 +367,82 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertEqual(1, result.returncode)
             self.assertIn("plan review artifact not found", result.stderr)
 
+    def test_generate_packet_implementation_plan_blocks_when_review_is_already_accepted(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_slice_fixture(root)
+            state_path = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "artifacts"
+                / "consumer_enablement_3__01_contract.plan-review.json"
+            )
+            state_path.write_text(
+                json.dumps({"status": "accepted"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATE_PACKET_IMPLEMENTATION_PLAN),
+                    "RPVINF-124",
+                    "consumer_enablement_3",
+                    "consumer_enablement_3__01_contract",
+                    "--repo-root",
+                    str(root),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("already accepted", result.stderr)
+
+    def test_generate_packet_implementation_plan_blocks_when_response_already_submitted(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_slice_fixture(root)
+            state_path = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "artifacts"
+                / "consumer_enablement_3__01_contract.plan-review.json"
+            )
+            state_path.write_text(
+                json.dumps({"status": "response_submitted"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATE_PACKET_IMPLEMENTATION_PLAN),
+                    "RPVINF-124",
+                    "consumer_enablement_3",
+                    "consumer_enablement_3__01_contract",
+                    "--repo-root",
+                    str(root),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("response is already submitted", result.stderr)
+
     def test_slice_status_includes_plan_review_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -417,6 +496,13 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
 
             payload = json.loads(result.stdout)
             self.assertEqual("changes_requested", payload["plan_review"]["status"])
+            self.assertEqual("changes_requested", payload["plan_monitor"]["status"])
+            self.assertTrue(payload["plan_monitor"]["requires_revision_run"])
+            self.assertTrue(
+                payload["plan_monitor"]["expected_artifact"].endswith(
+                    "consumer_enablement_3__02_wiring.plan-response.md"
+                )
+            )
 
     def test_migrate_pm_dawn_layout_dry_run_reports_canonical_follow_up_commands(
         self,
@@ -483,6 +569,201 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertFalse(payload["ignore_pm_dawn"])
             self.assertIsNone(payload["ignore_state"])
             self.assertFalse((root / ".gitignore").exists())
+
+    def test_launch_slice_session_dry_run_uses_harness_monitoring_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_slice_fixture(root)
+            write_fixture(
+                root / ".git" / "HEAD",
+                "ref: refs/heads/main\n",
+            )
+            write_fixture(
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "slices"
+                / "consumer_enablement_3.md",
+                "\n".join(
+                    [
+                        "# RPVINF-124 / consumer_enablement_3",
+                        "",
+                        "Group ID: consumer_enablement_3",
+                        "Primary Jira Key: RPVINF-127",
+                        "Secondary Jira Keys: None",
+                        "",
+                        "Goal:",
+                        "- Validate monitoring config flow for harness dry runs.",
+                        "",
+                        "Branch Recommendation:",
+                        "- feature/RPVINF-133-unattended-negotiation",
+                        "",
+                        "PR Traceability:",
+                        "- Primary: RPVINF-133",
+                        "- Additional: None",
+                        "",
+                        "Entry Criteria:",
+                        "- None",
+                        "",
+                        "Exit Criteria:",
+                        "- None",
+                        "",
+                        "Repo Surfaces:",
+                        "- epic-slice-implement/",
+                        "",
+                        "Implementation Steps:",
+                        "- Keep the packet handoff loadable.",
+                        "",
+                        "Validation Steps:",
+                        "- Run make check.",
+                        "",
+                        "Risks and Constraints:",
+                        "- None",
+                        "",
+                        "Open Questions:",
+                        "- None",
+                        "",
+                        "Source Review Context:",
+                        "- Derived from epic review of RPVINF-124 on 2026-04-20.",
+                        "- This story is best handled as an individual PR-sized unit after its blockers land.",
+                        "",
+                    ]
+                ),
+            )
+            write_fixture(
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "packets"
+                / "consumer_enablement_3__01_contract.md",
+                "\n".join(
+                    [
+                        "# RPVINF-124 / consumer_enablement_3__01_contract",
+                        "",
+                        "Packet ID:",
+                        "- consumer_enablement_3__01_contract",
+                        "",
+                        "Goal:",
+                        "- Keep the packet handoff loadable for dry-run monitoring tests.",
+                        "",
+                        "Why This Packet Is Isolated:",
+                        "- Packet type: contract",
+                        "",
+                        "Depends On:",
+                        "- None",
+                        "",
+                        "Files to Read:",
+                        "- epic-slice-implement/scripts/launch_slice_session.py",
+                        "",
+                        "Files to Change:",
+                        "- epic-slice-implement/scripts/launch_slice_session.py",
+                        "",
+                        "Implementation Steps:",
+                        "- Exercise dry-run monitoring payloads.",
+                        "",
+                        "Validation Steps:",
+                        "- Run make check.",
+                        "",
+                        "Acceptance Checks:",
+                        "- Dry-run payload resolves monitoring settings correctly.",
+                        "",
+                        "Constraints:",
+                        "- None",
+                        "",
+                        "Open Questions:",
+                        "- None",
+                        "",
+                        "Execution Routing:",
+                        "- Risk Class: mechanical",
+                        "- Recommended Executor: local_small_model",
+                        "",
+                        "Branch Recommendation:",
+                        "- feature/RPVINF-133-unattended-negotiation",
+                        "",
+                        "Commit Scope Guidance:",
+                        "- Keep the change narrow.",
+                        "",
+                        "Jira Traceability:",
+                        "- Primary: RPVINF-133",
+                        "- Additional: None",
+                        "",
+                    ]
+                ),
+            )
+            write_fixture(
+                root / ".pm-dawn" / "project-profile.toml",
+                "\n".join(
+                    [
+                        "[monitoring.defaults]",
+                        "initial_session_check_seconds = 5",
+                        "planning_artifact_grace_period_seconds = 60",
+                        "implementation_artifact_grace_period_seconds = 120",
+                        "",
+                        "[monitoring.opencode]",
+                        "initial_session_check_seconds = 45",
+                        "planning_artifact_grace_period_seconds = 95",
+                    ]
+                )
+                + "\n",
+            )
+            review_state = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "artifacts"
+                / "consumer_enablement_3__01_contract.plan-review.json"
+            )
+            review_state.write_text(
+                json.dumps(
+                    {
+                        "status": "accepted",
+                        "implementation_plan_artifact": str(
+                            (
+                                root
+                                / ".pm-dawn"
+                                / "epics"
+                                / "RPVINF-124"
+                                / "ops"
+                                / "artifacts"
+                                / "consumer_enablement_3__01_contract.implementation-plan.md"
+                            ).resolve()
+                        ),
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = self.run_script(
+                LAUNCH_SLICE_SESSION,
+                "RPVINF-124",
+                "consumer_enablement_3",
+                "--packet-id",
+                "consumer_enablement_3__01_contract",
+                "--repo-root",
+                str(root),
+                "--harness",
+                "opencode",
+                "--phase",
+                "implementing",
+                "--dry-run",
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual("opencode", payload["harness"])
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 45,
+                    "planning_artifact_grace_period_seconds": 95,
+                    "implementation_artifact_grace_period_seconds": 120,
+                },
+                payload["monitoring"],
+            )
 
 
 class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):

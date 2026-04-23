@@ -14,13 +14,22 @@ from unittest import mock
 
 from pm_dawn_core.implement import (
     IMPLEMENT_COMMAND_SURFACES,
+    packet_plan_expected_artifact_path,
+    packet_plan_monitor_state,
+    packet_plan_requires_revision_run,
+    packet_plan_review_state_snapshot,
     build_launch_prompt,
     build_steer_prompt,
     compile_packet_handoff,
+    harness_monitoring_settings,
     implement_command_relative_script_path,
     initialize_packet_plan_review_state,
     load_execution_input,
+    opencode_monitoring_settings,
     packet_plan_requires_acceptance,
+    pi_implementation_artifact_grace_period_seconds,
+    pi_initial_session_check_seconds,
+    pi_planning_artifact_grace_period_seconds,
     render_implement_command,
     resolve_agent_harness,
     resolve_harness_model,
@@ -388,6 +397,108 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertEqual("pi", harness)
             self.assertEqual("planner-model", model)
 
+    def test_harness_monitoring_settings_use_project_profile_and_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            write_file(
+                root / ".pm-dawn" / "project-profile.toml",
+                textwrap.dedent(
+                    """\
+                    [monitoring.defaults]
+                    initial_session_check_seconds = 6
+                    planning_artifact_grace_period_seconds = 70
+                    implementation_artifact_grace_period_seconds = 140
+
+                    [monitoring.pi]
+                    initial_session_check_seconds = 7
+                    planning_artifact_grace_period_seconds = 75
+                    implementation_artifact_grace_period_seconds = 150
+
+                    [monitoring.opencode]
+                    planning_artifact_grace_period_seconds = 90
+                    """
+                ),
+            )
+
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 7,
+                    "planning_artifact_grace_period_seconds": 75,
+                    "implementation_artifact_grace_period_seconds": 150,
+                },
+                harness_monitoring_settings(root, "pi"),
+            )
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 6,
+                    "planning_artifact_grace_period_seconds": 90,
+                    "implementation_artifact_grace_period_seconds": 140,
+                },
+                harness_monitoring_settings(root, "opencode"),
+            )
+            self.assertEqual(7, pi_initial_session_check_seconds(root))
+            self.assertEqual(75, pi_planning_artifact_grace_period_seconds(root))
+            self.assertEqual(150, pi_implementation_artifact_grace_period_seconds(root))
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 6,
+                    "planning_artifact_grace_period_seconds": 90,
+                    "implementation_artifact_grace_period_seconds": 140,
+                },
+                opencode_monitoring_settings(root),
+            )
+
+    def test_harness_monitoring_settings_fall_back_on_invalid_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            write_file(
+                root / ".pm-dawn" / "project-profile.toml",
+                textwrap.dedent(
+                    """\
+                    [monitoring.defaults]
+                    initial_session_check_seconds = -1
+                    planning_artifact_grace_period_seconds = "oops"
+                    implementation_artifact_grace_period_seconds = 0
+                    """
+                ),
+            )
+
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 5,
+                    "planning_artifact_grace_period_seconds": 60,
+                    "implementation_artifact_grace_period_seconds": 120,
+                },
+                harness_monitoring_settings(root, "pi"),
+            )
+
+    def test_harness_monitoring_settings_support_legacy_pi_monitoring_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            write_file(
+                root / ".pm-dawn" / "project-profile.toml",
+                textwrap.dedent(
+                    """\
+                    [pi.monitoring]
+                    initial_session_check_seconds = 9
+                    planning_artifact_grace_period_seconds = 99
+                    implementation_artifact_grace_period_seconds = 199
+                    """
+                ),
+            )
+
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 9,
+                    "planning_artifact_grace_period_seconds": 99,
+                    "implementation_artifact_grace_period_seconds": 199,
+                },
+                harness_monitoring_settings(root, "pi"),
+            )
+
     def test_resolve_approved_plan_path_prefers_reviewed_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
@@ -505,6 +616,103 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertIsNotNone(state)
             assert state is not None
             self.assertEqual("proposal_submitted", state["status"])
+
+    def test_packet_plan_monitor_state_reports_revision_response_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            state_path = packet_plan_review_state_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            state_path.write_text(
+                json.dumps({"status": "changes_requested"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            monitor = packet_plan_monitor_state(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+
+            self.assertEqual("changes_requested", monitor["status"])
+            self.assertTrue(monitor["waitable"])
+            self.assertTrue(monitor["requires_revision_run"])
+            self.assertTrue(
+                str(monitor["expected_artifact"]).endswith(
+                    "consumer_enablement_4__01_contract.plan-response.md"
+                )
+            )
+
+    def test_packet_plan_review_state_snapshot_marks_accepted_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            accepted = implementation_plan_artifact_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            accepted.write_text("# accepted\n", encoding="utf-8")
+            state_path = packet_plan_review_state_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "status": "accepted",
+                        "implementation_plan_artifact": str(accepted.resolve()),
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            snapshot = packet_plan_review_state_snapshot(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+
+            self.assertTrue(snapshot.accepted)
+            self.assertFalse(snapshot.requires_revision_run)
+            self.assertEqual(accepted.resolve(), snapshot.expected_artifact.resolve())
+
+    def test_packet_plan_requires_revision_run_true_for_changes_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            state_path = packet_plan_review_state_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            state_path.write_text(
+                json.dumps({"status": "changes_requested"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertTrue(
+                packet_plan_requires_revision_run(
+                    root,
+                    "RPVINF-124",
+                    "consumer_enablement_4__01_contract",
+                )
+            )
+            expected = packet_plan_expected_artifact_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            assert expected is not None
+            self.assertTrue(
+                expected.name.endswith("consumer_enablement_4__01_contract.plan-response.md")
+            )
 
     def test_build_launch_prompt_includes_reviewed_plan_rules(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

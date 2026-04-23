@@ -85,7 +85,7 @@ Phase/result artifacts live alongside the run metadata:
 - `.pm-dawn/epics/<epic-key>/ops/runs/<group-id>.result.md`
 
 Fresh implementation runs should consume the approved plan artifact rather than continuing the original planning session transcript.
-For packet-first execution, plan review is explicit:
+For packet-first execution, plan review is explicit and artifact-driven:
 - worker draft plan proposal:
   - `.plan-proposal.md`
 - reviewer comments:
@@ -96,6 +96,8 @@ For packet-first execution, plan review is explicit:
   - `.plan-review.json`
 - accepted implementation brief:
   - `.implementation-plan.md`
+
+**Note for Pi**: The revision loop is artifact-driven. Pi reads `.plan-review.md` and writes `.plan-response.md` for each revision cycle. The accepted implementation brief (`.implementation-plan.md`) is materialized by reviewer acceptance, not worker claim.
 
 Implementation launch for a packet must not begin until `.plan-review.json` records `status=accepted`.
 When a packet-specific `.implementation-plan.md` exists and the review state is accepted, implementation runs should consume it as the reviewer-accepted implementation brief.

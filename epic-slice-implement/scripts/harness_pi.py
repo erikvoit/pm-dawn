@@ -13,6 +13,10 @@ from common import (
     pi_tail_script,
     write_text,
 )
+from pm_dawn_core.implement import (
+    pi_initial_session_check_seconds,
+    pi_planning_artifact_grace_period_seconds,
+)
 from pm_dawn_core.runtime import require_cli, run_cmd, tmux_has_session
 
 
@@ -92,6 +96,8 @@ def run_packet_planning(
     session_dir.mkdir(parents=True, exist_ok=True)
     if output_path.exists():
         output_path.unlink()
+    initial_check_seconds = pi_initial_session_check_seconds(root)
+    artifact_grace_seconds = pi_planning_artifact_grace_period_seconds(root)
     tmux_session = pi_plan_tmux_session_name(epic_key, packet_id)
     if tmux_has_session(tmux_session):
         run_cmd(["tmux", "kill-session", "-t", tmux_session], check=False)
@@ -106,7 +112,11 @@ def run_packet_planning(
         runner_script=pi_runner_script(root=root, session_dir=session_dir, command=cmd),
         tail_script=pi_tail_script(session_dir=session_dir),
     )
-    deadline = time.time() + timeout_seconds
+    started_at = time.time()
+    startup_deadline = started_at + initial_check_seconds
+    artifact_grace_deadline = started_at + artifact_grace_seconds
+    deadline = started_at + timeout_seconds
+    session_started = False
     while time.time() < deadline:
         if output_path.exists():
             emit_json(
@@ -123,8 +133,15 @@ def run_packet_planning(
                 }
             )
             return
-        if not tmux_has_session(tmux_session):
+        session_alive = tmux_has_session(tmux_session)
+        if session_alive:
+            session_started = True
+        now = time.time()
+        if not session_started and now >= startup_deadline:
             break
+        if session_alive or now < artifact_grace_deadline:
+            time.sleep(2)
+            continue
         time.sleep(2)
 
     if output_path.exists():
@@ -143,7 +160,9 @@ def run_packet_planning(
         )
         return
 
-    salvaged = salvage_plan_from_pi_session_log(session_dir, epic_key, packet_id)
+    salvaged = None
+    if time.time() >= artifact_grace_deadline:
+        salvaged = salvage_plan_from_pi_session_log(session_dir, epic_key, packet_id)
     if salvaged is not None:
         write_text(output_path, salvaged)
         emit_json(
@@ -166,7 +185,13 @@ def run_packet_planning(
     emit_json(
         {
             "status": "failed",
-            "reason": "timeout_waiting_for_plan_artifact" if timed_out else "missing_plan_artifact",
+            "reason": (
+                "session_failed_to_start"
+                if not session_started
+                else "timeout_waiting_for_plan_artifact"
+                if timed_out
+                else "missing_plan_artifact"
+            ),
             "harness": "pi",
             "model": model,
             "model_check": model_check,
@@ -174,6 +199,10 @@ def run_packet_planning(
             "output_path": str(output_path),
             "tmux_session": tmux_session,
             "session_dir": str(session_dir),
+            "monitoring": {
+                "initial_session_check_seconds": initial_check_seconds,
+                "artifact_grace_period_seconds": artifact_grace_seconds,
+            },
             "attach_instructions": pi_plan_attach_instructions(tmux_session, session_dir),
         }
     )

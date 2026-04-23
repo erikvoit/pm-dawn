@@ -12,15 +12,13 @@ if str(ROOT) not in sys.path:
 
 from common import emit_json, now_iso, write_json
 from pm_dawn_core.implement import (
+    packet_plan_monitor_state,
     packet_plan_review_state_template,
     resolve_implement_command,
     resolve_packet_plan_review_state,
 )
 from pm_dawn_core.layout import (
-    implementation_plan_artifact_path,
-    packet_plan_proposal_artifact_path,
-    packet_plan_response_artifact_path,
-    packet_plan_review_artifact_path,
+    packet_plan_artifacts,
     packet_plan_review_state_path,
 )
 from pm_dawn_core.profile import repo_root
@@ -44,7 +42,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_state(root: Path, epic_key: str, packet_id: str) -> tuple[dict, Path]:
-    state_path = packet_plan_review_state_path(root, epic_key, packet_id)
+    artifacts = packet_plan_artifacts(root, epic_key, packet_id)
+    state_path = artifacts.review_state_json
     existing = resolve_packet_plan_review_state(root, epic_key, packet_id)
     if existing is not None:
         return existing, state_path
@@ -54,7 +53,7 @@ def load_state(root: Path, epic_key: str, packet_id: str) -> tuple[dict, Path]:
             epic_key,
             packet_id,
             status="proposal_submitted",
-            proposal_path=packet_plan_proposal_artifact_path(root, epic_key, packet_id),
+            proposal_path=artifacts.proposal_md,
         ),
         state_path,
     )
@@ -70,10 +69,11 @@ def main() -> None:
     args = parse_args()
     root = repo_root(args.repo_root)
     state, state_path = load_state(root, args.epic_key, args.packet_id)
-    proposal_path = packet_plan_proposal_artifact_path(root, args.epic_key, args.packet_id)
-    review_path = packet_plan_review_artifact_path(root, args.epic_key, args.packet_id)
-    response_path = packet_plan_response_artifact_path(root, args.epic_key, args.packet_id)
-    implementation_path = implementation_plan_artifact_path(root, args.epic_key, args.packet_id)
+    artifacts = packet_plan_artifacts(root, args.epic_key, args.packet_id)
+    proposal_path = artifacts.proposal_md
+    review_path = artifacts.review_md
+    response_path = artifacts.response_md
+    implementation_path = artifacts.implementation_plan_md
     current_time = now_iso()
 
     if args.action == "submit-review":
@@ -145,6 +145,12 @@ def main() -> None:
             "implementation_plan_artifact": state.get("implementation_plan_artifact"),
             "accepted_artifact": state.get("accepted_artifact"),
             "last_action": state.get("last_action"),
+            "plan_monitor": packet_plan_monitor_state(
+                root,
+                args.epic_key,
+                args.packet_id,
+                state=state,
+            ),
         }
     )
 

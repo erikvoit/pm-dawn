@@ -19,6 +19,15 @@ class SlicePaths:
     artifacts_dir: Path
 
 
+@dataclass(frozen=True)
+class PacketPlanArtifacts:
+    proposal_md: Path
+    review_md: Path
+    response_md: Path
+    implementation_plan_md: Path
+    review_state_json: Path
+
+
 def pm_dawn_root(root: Path) -> Path:
     return repo_root(root) / ".pm-dawn"
 
@@ -119,6 +128,16 @@ def packet_plan_response_artifact_path(root: Path, epic_key: str, packet_id: str
 
 def packet_plan_review_state_path(root: Path, epic_key: str, packet_id: str) -> Path:
     return artifacts_root(root, epic_key) / f"{packet_id}.plan-review.json"
+
+
+def packet_plan_artifacts(root: Path, epic_key: str, packet_id: str) -> PacketPlanArtifacts:
+    return PacketPlanArtifacts(
+        proposal_md=packet_plan_proposal_artifact_path(root, epic_key, packet_id),
+        review_md=packet_plan_review_artifact_path(root, epic_key, packet_id),
+        response_md=packet_plan_response_artifact_path(root, epic_key, packet_id),
+        implementation_plan_md=implementation_plan_artifact_path(root, epic_key, packet_id),
+        review_state_json=packet_plan_review_state_path(root, epic_key, packet_id),
+    )
 
 
 def legacy_opencode_plan_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:

@@ -23,7 +23,7 @@ from common import (
     write_text,
 )
 from pm_dawn_core.layout import run_artifact_path, run_metadata_path
-from pm_dawn_core.implement import resolve_packet_plan_review_state
+from pm_dawn_core.implement import packet_plan_monitor_state, resolve_packet_plan_review_state
 from pm_dawn_core.profile import repo_root
 
 
@@ -52,6 +52,11 @@ def main() -> None:
         if isinstance(packet_id, str) and packet_id
         else None
     )
+    plan_monitor = (
+        packet_plan_monitor_state(root, args.epic_key, packet_id, state=plan_review)
+        if isinstance(packet_id, str) and packet_id
+        else None
+    )
     harness = run_meta.get("harness", "opencode")
     runtime = run_meta.get("runtime", {})
     session_id = runtime.get("session_id") or run_meta.get("opencode", {}).get("session_id")
@@ -65,6 +70,7 @@ def main() -> None:
             "artifacts": run_meta.get("artifacts", {}),
             "worker": run_meta.get("worker", {}),
             "plan_review": plan_review,
+            "plan_monitor": plan_monitor,
             "warning": "transcript sync is currently only supported for opencode-backed sessions",
         }
         emit_json(payload)
@@ -83,6 +89,7 @@ def main() -> None:
             "artifacts": run_meta.get("artifacts", {}),
             "worker": run_meta.get("worker", {}),
             "plan_review": plan_review,
+            "plan_monitor": plan_monitor,
             "warning": str(exc),
         }
         emit_json(payload)
@@ -137,6 +144,7 @@ def main() -> None:
         "artifacts": artifacts,
         "worker": updated.get("worker", {}),
         "plan_review": plan_review,
+        "plan_monitor": plan_monitor,
     }
     emit_json(payload)
 

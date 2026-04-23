@@ -20,6 +20,15 @@ allow_codex_prefix = true
 [validation]
 full_suite_command = "make check"
 
+[monitoring.defaults]
+initial_session_check_seconds = 5
+planning_artifact_grace_period_seconds = 60
+implementation_artifact_grace_period_seconds = 120
+
+[monitoring.pi]
+
+[monitoring.opencode]
+
 [planning]
 default_search_surfaces = ["."]
 secondary_search_surfaces = ["tests"]

@@ -36,7 +36,9 @@ from common import (
 )
 from pm_dawn_core.implement import (
     build_launch_prompt,
+    harness_monitoring_settings,
     load_execution_input,
+    packet_plan_monitor_state,
     packet_plan_requires_acceptance,
     resolve_agent_harness,
     resolve_approved_plan_path,
@@ -90,6 +92,8 @@ def record_run(args: argparse.Namespace, handoff: dict, handoff_path: Path, payl
     ]
     if payload.get("model_check") is not None:
         cmd += ["--model-check", json.dumps(payload["model_check"], sort_keys=True)]
+    if payload.get("monitoring") is not None:
+        cmd += ["--monitoring", json.dumps(payload["monitoring"], sort_keys=True)]
     if payload.get("server_url"):
         cmd += ["--server-url", payload["server_url"]]
     if payload.get("opencode_session_id"):
@@ -133,6 +137,11 @@ def main() -> None:
     ignore_state = ensure_pm_dawn_ignored(root)
     approved_plan = resolve_approved_plan_path(root, args.epic_key, args.packet_id, args.approved_plan)
     review_state = resolve_packet_plan_review_state(root, args.epic_key, args.packet_id) if args.packet_id else None
+    plan_monitor = (
+        packet_plan_monitor_state(root, args.epic_key, args.packet_id, state=review_state)
+        if args.packet_id
+        else None
+    )
     if args.phase == "implementing" and args.packet_id:
         if args.approved_plan is None and packet_plan_requires_acceptance(root, args.epic_key, args.packet_id):
             if review_state is None:
@@ -172,9 +181,23 @@ def main() -> None:
         "attach_instructions": [],
         "title": title,
         "plan_review": review_state if args.packet_id else None,
+        "plan_monitor": plan_monitor,
     }
     if approved_plan:
         payload["approved_plan"] = str(approved_plan)
+    payload["monitoring"] = harness_monitoring_settings(root, harness)
+
+    if args.dry_run:
+        if harness == "pi":
+            payload["runtime_mode"] = "tmux-run"
+            payload["attach_instructions"] = pi_attach_instructions(None)
+        elif args.runtime == "server":
+            payload["server_url"] = args.server_url
+            payload["attach_instructions"] = attach_instructions(args.server_url, None, None, root)
+        else:
+            payload["attach_instructions"] = attach_instructions(None, None, None, root)
+        emit_json(payload)
+        return
 
     if harness == "opencode" and args.runtime == "server":
         require_cli("opencode")
@@ -196,14 +219,6 @@ def main() -> None:
             server_data = {"server_url": args.server_url, "tmux_session": server_session, "status": "already_running"}
         payload["server_url"] = server_data["server_url"]
         payload["server_tmux_session"] = server_data["tmux_session"]
-    if args.dry_run:
-        if harness == "pi":
-            payload["runtime_mode"] = "tmux-run"
-            payload["attach_instructions"] = pi_attach_instructions(None)
-        else:
-            payload["attach_instructions"] = attach_instructions(payload["server_url"], None, None, root)
-        emit_json(payload)
-        return
 
     if harness == "pi":
         require_cli("pi")
@@ -235,7 +250,10 @@ def main() -> None:
         )
         run_cmd(["tmux", "new-session", "-d", "-s", worker_session, cmd])
         payload["tmux_session"] = worker_session
-        session = poll_for_session(title, timeout_seconds=20)
+        session = poll_for_session(
+            title,
+            timeout_seconds=max(20, int(payload["monitoring"]["initial_session_check_seconds"])),
+        )
         if session:
             payload["opencode_session_id"] = session.get("id")
         payload["attach_instructions"] = attach_instructions(payload["server_url"], payload["opencode_session_id"], worker_session, root)

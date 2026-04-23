@@ -10,6 +10,7 @@ from .layout import (
     implementation_plan_artifact_path,
     legacy_opencode_plan_artifact_path,
     packet_markdown_path,
+    packet_plan_artifacts,
     packet_plan_proposal_artifact_path,
     packet_plan_response_artifact_path,
     packet_plan_review_artifact_path,
@@ -43,6 +44,24 @@ REQUIRED_HANDOFF_FIELDS = [
     "source_context",
 ]
 
+PACKET_PLAN_REVIEW_STATUSES = frozenset(
+    {
+        "proposal_submitted",
+        "changes_requested",
+        "response_submitted",
+        "accepted",
+        "rejected",
+    }
+)
+
+PACKET_PLAN_WAITABLE_STATUSES = frozenset(
+    {
+        "proposal_submitted",
+        "changes_requested",
+        "response_submitted",
+    }
+)
+
 
 @dataclass(frozen=True)
 class ImplementCommandSurface:
@@ -54,6 +73,38 @@ class ImplementCommandSurface:
     @property
     def relative_script_path(self) -> Path:
         return Path("epic-slice-implement") / "scripts" / self.script_name
+
+
+@dataclass(frozen=True)
+class PacketPlanReviewStateSnapshot:
+    status: str
+    current_artifact: Path | None
+    submitted_artifact: Path | None
+    proposal_artifact: Path
+    review_artifact: Path
+    response_artifact: Path
+    implementation_plan_artifact: Path
+    accepted_artifact: Path | None = None
+
+    @property
+    def requires_revision_run(self) -> bool:
+        return self.status == "changes_requested"
+
+    @property
+    def accepted(self) -> bool:
+        return self.status == "accepted"
+
+    @property
+    def expected_artifact(self) -> Path | None:
+        if self.status == "changes_requested":
+            return self.response_artifact
+        if self.status == "proposal_submitted":
+            return self.proposal_artifact
+        if self.status == "response_submitted":
+            return self.response_artifact
+        if self.status == "accepted":
+            return self.implementation_plan_artifact
+        return None
 
 
 IMPLEMENT_COMMAND_SURFACES = (
@@ -171,6 +222,15 @@ def render_implement_command(
 
 DEFAULT_PROJECT_PROFILE: dict = make_default_profile(
     {
+        "monitoring": {
+            "defaults": {
+                "initial_session_check_seconds": 5,
+                "planning_artifact_grace_period_seconds": 60,
+                "implementation_artifact_grace_period_seconds": 120,
+            },
+            "pi": {},
+            "opencode": {},
+        },
         "agent_harness": {
             "default": "opencode",
         },
@@ -191,6 +251,55 @@ def load_project_profile(root: Path) -> dict:
 def full_suite_command(root: Path) -> str:
     profile = load_project_profile(root)
     return str(profile.get("validation", {}).get("full_suite_command", "make check"))
+
+
+def harness_monitoring_settings(root: Path, harness: str) -> dict[str, int]:
+    profile = load_project_profile(root)
+    monitoring = profile.get("monitoring", {})
+    base_defaults = DEFAULT_PROJECT_PROFILE["monitoring"]["defaults"]
+    defaults = monitoring.get("defaults", base_defaults)
+    harness_overrides = monitoring.get(harness, {})
+    legacy_overrides = {}
+    if harness == "pi":
+        legacy_overrides = profile.get("pi", {}).get("monitoring", {})
+    elif harness == "opencode":
+        legacy_overrides = profile.get("opencode", {}).get("monitoring", {})
+
+    def resolve(name: str) -> int:
+        value = harness_overrides.get(name, legacy_overrides.get(name, defaults[name]))
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return int(base_defaults[name])
+        return parsed if parsed > 0 else int(base_defaults[name])
+
+    return {
+        "initial_session_check_seconds": resolve("initial_session_check_seconds"),
+        "planning_artifact_grace_period_seconds": resolve("planning_artifact_grace_period_seconds"),
+        "implementation_artifact_grace_period_seconds": resolve(
+            "implementation_artifact_grace_period_seconds"
+        ),
+    }
+
+
+def pi_monitoring_settings(root: Path) -> dict[str, int]:
+    return harness_monitoring_settings(root, "pi")
+
+
+def opencode_monitoring_settings(root: Path) -> dict[str, int]:
+    return harness_monitoring_settings(root, "opencode")
+
+
+def pi_initial_session_check_seconds(root: Path) -> int:
+    return pi_monitoring_settings(root)["initial_session_check_seconds"]
+
+
+def pi_planning_artifact_grace_period_seconds(root: Path) -> int:
+    return pi_monitoring_settings(root)["planning_artifact_grace_period_seconds"]
+
+
+def pi_implementation_artifact_grace_period_seconds(root: Path) -> int:
+    return pi_monitoring_settings(root)["implementation_artifact_grace_period_seconds"]
 
 
 def packet_type_from_id(packet_id: str | None) -> str | None:
@@ -356,10 +465,11 @@ def packet_plan_review_state_template(
     implementation_plan_path: Path | None = None,
 ) -> dict:
     root = repo_root(root)
-    proposal = proposal_path or packet_plan_proposal_artifact_path(root, epic_key, packet_id)
-    review = review_path or packet_plan_review_artifact_path(root, epic_key, packet_id)
-    response = response_path or packet_plan_response_artifact_path(root, epic_key, packet_id)
-    implementation = implementation_plan_path or implementation_plan_artifact_path(root, epic_key, packet_id)
+    artifacts = packet_plan_artifacts(root, epic_key, packet_id)
+    proposal = proposal_path or artifacts.proposal_md
+    review = review_path or artifacts.review_md
+    response = response_path or artifacts.response_md
+    implementation = implementation_plan_path or artifacts.implementation_plan_md
     return {
         "schema_version": "v1",
         "epic_key": epic_key,
@@ -380,6 +490,97 @@ def resolve_packet_plan_review_state(root: Path, epic_key: str, packet_id: str) 
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def packet_plan_review_state_snapshot(
+    root: Path,
+    epic_key: str,
+    packet_id: str,
+    *,
+    state: dict | None = None,
+) -> PacketPlanReviewStateSnapshot:
+    root = repo_root(root)
+    artifacts = packet_plan_artifacts(root, epic_key, packet_id)
+    payload = state or resolve_packet_plan_review_state(root, epic_key, packet_id) or {}
+
+    def resolve_optional_path(value: object) -> Path | None:
+        if isinstance(value, str) and value:
+            return Path(value)
+        return None
+
+    status = str(payload.get("status") or "proposal_submitted")
+    if status not in PACKET_PLAN_REVIEW_STATUSES:
+        status = "proposal_submitted"
+
+    return PacketPlanReviewStateSnapshot(
+        status=status,
+        current_artifact=resolve_optional_path(payload.get("current_artifact")),
+        submitted_artifact=resolve_optional_path(payload.get("submitted_artifact")),
+        proposal_artifact=artifacts.proposal_md,
+        review_artifact=artifacts.review_md,
+        response_artifact=artifacts.response_md,
+        implementation_plan_artifact=artifacts.implementation_plan_md,
+        accepted_artifact=resolve_optional_path(payload.get("accepted_artifact")),
+    )
+
+
+def packet_plan_expected_artifact_path(
+    root: Path,
+    epic_key: str,
+    packet_id: str,
+    *,
+    state: dict | None = None,
+) -> Path | None:
+    snapshot = packet_plan_review_state_snapshot(
+        root,
+        epic_key,
+        packet_id,
+        state=state,
+    )
+    return snapshot.expected_artifact
+
+
+def packet_plan_requires_revision_run(
+    root: Path,
+    epic_key: str,
+    packet_id: str,
+    *,
+    state: dict | None = None,
+) -> bool:
+    snapshot = packet_plan_review_state_snapshot(
+        root,
+        epic_key,
+        packet_id,
+        state=state,
+    )
+    return snapshot.requires_revision_run
+
+
+def packet_plan_monitor_state(
+    root: Path,
+    epic_key: str,
+    packet_id: str,
+    *,
+    state: dict | None = None,
+) -> dict[str, object]:
+    snapshot = packet_plan_review_state_snapshot(
+        root,
+        epic_key,
+        packet_id,
+        state=state,
+    )
+    expected = snapshot.expected_artifact
+    return {
+        "status": snapshot.status,
+        "waitable": snapshot.status in PACKET_PLAN_WAITABLE_STATUSES,
+        "requires_revision_run": snapshot.requires_revision_run,
+        "accepted": snapshot.accepted,
+        "current_artifact": str(snapshot.current_artifact) if snapshot.current_artifact else None,
+        "submitted_artifact": str(snapshot.submitted_artifact) if snapshot.submitted_artifact else None,
+        "expected_artifact": str(expected) if expected else None,
+        "accepted_artifact": str(snapshot.accepted_artifact) if snapshot.accepted_artifact else None,
+        "implementation_plan_artifact": str(snapshot.implementation_plan_artifact),
+    }
+
+
 def packet_plan_requires_acceptance(root: Path, epic_key: str, packet_id: str) -> bool:
     root = repo_root(root)
     state = resolve_packet_plan_review_state(root, epic_key, packet_id)
@@ -393,8 +594,9 @@ def packet_plan_requires_acceptance(root: Path, epic_key: str, packet_id: str) -
 
 def initialize_packet_plan_review_state(root: Path, epic_key: str, packet_id: str) -> Path:
     root = repo_root(root)
-    proposal = packet_plan_proposal_artifact_path(root, epic_key, packet_id)
-    state_path = packet_plan_review_state_path(root, epic_key, packet_id)
+    artifacts = packet_plan_artifacts(root, epic_key, packet_id)
+    proposal = artifacts.proposal_md
+    state_path = artifacts.review_state_json
     payload = packet_plan_review_state_template(
         root,
         epic_key,
