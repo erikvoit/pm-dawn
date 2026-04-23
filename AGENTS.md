@@ -57,6 +57,7 @@ This document defines the runtime and dependency policy that should guide work i
 - Required external CLI tools are part of the PM Dawn workflow contract and may be assumed only when the specific workflow needs them.
 - Harnesses should not have to infer a custom Python environment manager just to run basic PM Dawn scripts.
 - Harnesses should not have to guess whether a script needs `uv`, `pip`, or some local virtualenv unless PM Dawn provides a single explicit wrapper for that purpose.
+- PM Dawn-owned environment/config lookups and CLI prerequisite checks should come from one shared runtime contract instead of being reimplemented per tool surface.
 
 ## What Harnesses Must Not Assume
 - That third-party Python packages are already installed globally.
@@ -119,3 +120,4 @@ That work includes:
 - Keep the line between protocol-core behavior, harness-specific orchestration, and future ACP convergence explicit instead of collapsing them in one change.
 - Treat `.pm-dawn/` as repo-local working state that should usually be added to `.gitignore` by default unless a task explicitly calls for checking those artifacts into version control.
 - “Ignored” here means Git ignore behavior only; agents should still read and use `.pm-dawn/` artifacts as normal workflow inputs and outputs.
+- When runtime behavior such as env overrides, shell selection, or CLI prerequisite checks changes, prefer updating the shared PM Dawn runtime layer rather than open-coding a new variant in one script family.
