@@ -14,19 +14,32 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_ROOT = REPO_ROOT / "epic-slice-implement" / "scripts"
-COMMON_SPEC = importlib.util.spec_from_file_location("epic_slice_implement_common", SCRIPT_ROOT / "common.py")
+COMMON_SPEC = importlib.util.spec_from_file_location(
+    "epic_slice_implement_common", SCRIPT_ROOT / "common.py"
+)
 assert COMMON_SPEC is not None and COMMON_SPEC.loader is not None
 implement_common = importlib.util.module_from_spec(COMMON_SPEC)
 COMMON_SPEC.loader.exec_module(implement_common)
 
 SLICE_STATUS = REPO_ROOT / "epic-slice-implement" / "scripts" / "slice_status.py"
-CLEANUP_SLICE_ARTIFACTS = REPO_ROOT / "epic-slice-implement" / "scripts" / "cleanup_slice_artifacts.py"
-CLEANUP_SLICE_BY_NAME = REPO_ROOT / "epic-slice-implement" / "scripts" / "cleanup_slice_by_name.py"
-GENERATE_PACKET_IMPLEMENTATION_PLAN = (
-    REPO_ROOT / "epic-slice-implement" / "scripts" / "generate_packet_implementation_plan.py"
+CLEANUP_SLICE_ARTIFACTS = (
+    REPO_ROOT / "epic-slice-implement" / "scripts" / "cleanup_slice_artifacts.py"
 )
-COORDINATE_PLAN_REVIEW = REPO_ROOT / "epic-slice-implement" / "scripts" / "coordinate_plan_review.py"
-MIGRATE_PM_DAWN_LAYOUT = REPO_ROOT / "epic-slice-implement" / "scripts" / "migrate_pm_dawn_layout.py"
+CLEANUP_SLICE_BY_NAME = (
+    REPO_ROOT / "epic-slice-implement" / "scripts" / "cleanup_slice_by_name.py"
+)
+GENERATE_PACKET_IMPLEMENTATION_PLAN = (
+    REPO_ROOT
+    / "epic-slice-implement"
+    / "scripts"
+    / "generate_packet_implementation_plan.py"
+)
+COORDINATE_PLAN_REVIEW = (
+    REPO_ROOT / "epic-slice-implement" / "scripts" / "coordinate_plan_review.py"
+)
+MIGRATE_PM_DAWN_LAYOUT = (
+    REPO_ROOT / "epic-slice-implement" / "scripts" / "migrate_pm_dawn_layout.py"
+)
 
 
 def write_fixture(path: Path, content: str = "fixture\n") -> None:
@@ -34,7 +47,9 @@ def write_fixture(path: Path, content: str = "fixture\n") -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def build_slice_fixture(root: Path, *, epic_key: str = "RPVINF-124", group_id: str = "consumer_enablement_3") -> None:
+def build_slice_fixture(
+    root: Path, *, epic_key: str = "RPVINF-124", group_id: str = "consumer_enablement_3"
+) -> None:
     epic_root = root / ".pm-dawn" / "epics" / epic_key
     fixture_files = {
         "slices": [f"{group_id}.md"],
@@ -54,7 +69,11 @@ def build_slice_fixture(root: Path, *, epic_key: str = "RPVINF-124", group_id: s
             f"{group_id}__01_contract.plan-proposal.md",
             f"{group_id}__01_contract.plan-review.json",
         ],
-        "ops/runs": [f"{group_id}.json", f"{group_id}.plan.md", f"{group_id}.result.md"],
+        "ops/runs": [
+            f"{group_id}.json",
+            f"{group_id}.plan.md",
+            f"{group_id}.result.md",
+        ],
     }
     for directory, filenames in fixture_files.items():
         for filename in filenames:
@@ -96,18 +115,27 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                 str(
                     (
                         root
-                    / ".pm-dawn"
-                    / "archive"
-                    / "RPVINF-124"
-                    / "consumer_enablement_3"
-                    / "ops"
-                    / "artifacts"
-                    / "consumer_enablement_3__01_contract.implementation-plan.md"
+                        / ".pm-dawn"
+                        / "archive"
+                        / "RPVINF-124"
+                        / "consumer_enablement_3"
+                        / "ops"
+                        / "artifacts"
+                        / "consumer_enablement_3__01_contract.implementation-plan.md"
                     ).resolve()
                 ),
                 archived_paths,
             )
-            self.assertTrue((root / ".pm-dawn" / "epics" / "RPVINF-124" / "slices" / "consumer_enablement_3.md").exists())
+            self.assertTrue(
+                (
+                    root
+                    / ".pm-dawn"
+                    / "epics"
+                    / "RPVINF-124"
+                    / "slices"
+                    / "consumer_enablement_3.md"
+                ).exists()
+            )
 
     def test_cleanup_slice_by_name_resolves_epic_and_reuses_cleanup_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -129,7 +157,16 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertEqual(17, payload["target_count"])
             target_paths = {str(Path(item).resolve()) for item in payload["targets"]}
             self.assertIn(
-                str((root / ".pm-dawn" / "epics" / "RPVINF-124" / "packets" / "consumer_enablement_3__02_wiring.md").resolve()),
+                str(
+                    (
+                        root
+                        / ".pm-dawn"
+                        / "epics"
+                        / "RPVINF-124"
+                        / "packets"
+                        / "consumer_enablement_3__02_wiring.md"
+                    ).resolve()
+                ),
                 target_paths,
             )
 
@@ -187,7 +224,9 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                             ),
                         },
                         "last_action": "worker_marked_pending_review",
-                        "attach_instructions": ["tmux attach -t pi-RPVINF-124-consumer_enablement_3__02_wiring"],
+                        "attach_instructions": [
+                            "tmux attach -t pi-RPVINF-124-consumer_enablement_3__02_wiring"
+                        ],
                         "artifacts": {
                             "implementation_plan_md": str(
                                 root
@@ -230,14 +269,18 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             )
             self.assertIsNone(payload["last_completed_at"])
 
-    def test_generate_packet_implementation_plan_help_uses_shared_description(self) -> None:
+    def test_generate_packet_implementation_plan_help_uses_shared_description(
+        self,
+    ) -> None:
         result = self.run_script(GENERATE_PACKET_IMPLEMENTATION_PLAN, "--help")
         self.assertIn(
             "Generate a worker-authored packet plan proposal artifact.",
             result.stdout,
         )
 
-    def test_coordinate_plan_review_accept_copies_proposal_to_implementation_brief(self) -> None:
+    def test_coordinate_plan_review_accept_copies_proposal_to_implementation_brief(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
             proposal = (
@@ -273,7 +316,9 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                 / "artifacts"
                 / "consumer_enablement_3__01_contract.implementation-plan.md"
             )
-            self.assertEqual("# accepted plan\n", implementation_brief.read_text(encoding="utf-8"))
+            self.assertEqual(
+                "# accepted plan\n", implementation_brief.read_text(encoding="utf-8")
+            )
             state = json.loads(
                 (
                     root
@@ -286,9 +331,14 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                 ).read_text(encoding="utf-8")
             )
             self.assertEqual("accepted", state["status"])
-            self.assertEqual(str(implementation_brief.resolve()), state["implementation_plan_artifact"])
+            self.assertEqual(
+                str(implementation_brief.resolve()),
+                state["implementation_plan_artifact"],
+            )
 
-    def test_coordinate_plan_review_submit_review_requires_existing_custom_artifact(self) -> None:
+    def test_coordinate_plan_review_submit_review_requires_existing_custom_artifact(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
 
@@ -368,7 +418,9 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             payload = json.loads(result.stdout)
             self.assertEqual("changes_requested", payload["plan_review"]["status"])
 
-    def test_migrate_pm_dawn_layout_dry_run_reports_canonical_follow_up_commands(self) -> None:
+    def test_migrate_pm_dawn_layout_dry_run_reports_canonical_follow_up_commands(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
             (root / ".git").mkdir()
@@ -392,7 +444,9 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                 payload["recommended_commands"]["launch"],
             )
             self.assertTrue(payload["ignore_pm_dawn"])
-            self.assertEqual("would_create_gitignore", payload["ignore_state"]["status"])
+            self.assertEqual(
+                "would_create_gitignore", payload["ignore_state"]["status"]
+            )
             self.assertTrue(payload["ignore_state"]["path"].endswith(".gitignore"))
 
     def test_migrate_pm_dawn_layout_creates_gitignore_by_default(self) -> None:
@@ -409,7 +463,9 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             payload = json.loads(result.stdout)
             self.assertTrue(payload["ignore_pm_dawn"])
             self.assertEqual("created_gitignore", payload["ignore_state"]["status"])
-            self.assertEqual(".pm-dawn/\n", (root / ".gitignore").read_text(encoding="utf-8"))
+            self.assertEqual(
+                ".pm-dawn/\n", (root / ".gitignore").read_text(encoding="utf-8")
+            )
 
     def test_migrate_pm_dawn_layout_skips_ignore_when_opted_out(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -431,8 +487,14 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
 
 class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
     def test_opencode_config_path_prefers_env_override(self) -> None:
-        with mock.patch.dict("os.environ", {"PM_DAWN_OPENCODE_CONFIG_PATH": "/tmp/opencode.json"}, clear=False):
-            self.assertEqual(Path("/tmp/opencode.json"), implement_common.opencode_config_path())
+        with mock.patch.dict(
+            "os.environ",
+            {"PM_DAWN_OPENCODE_CONFIG_PATH": "/tmp/opencode.json"},
+            clear=False,
+        ):
+            self.assertEqual(
+                Path("/tmp/opencode.json"), implement_common.opencode_config_path()
+            )
 
     def test_opencode_config_path_uses_xdg_config_home(self) -> None:
         env = {"XDG_CONFIG_HOME": "/tmp/xdg-config"}
@@ -443,11 +505,19 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
             )
 
     def test_pi_models_config_path_prefers_env_override(self) -> None:
-        with mock.patch.dict("os.environ", {"PM_DAWN_PI_MODELS_CONFIG_PATH": "/tmp/pi-models.json"}, clear=False):
-            self.assertEqual(Path("/tmp/pi-models.json"), implement_common.pi_models_config_path())
+        with mock.patch.dict(
+            "os.environ",
+            {"PM_DAWN_PI_MODELS_CONFIG_PATH": "/tmp/pi-models.json"},
+            clear=False,
+        ):
+            self.assertEqual(
+                Path("/tmp/pi-models.json"), implement_common.pi_models_config_path()
+            )
 
     def test_tmux_has_session_returns_false_when_tmux_missing(self) -> None:
-        with mock.patch.object(implement_common, "command_available", return_value=False):
+        with mock.patch.object(
+            implement_common, "command_available", return_value=False
+        ):
             self.assertFalse(implement_common.tmux_has_session("missing-session"))
 
     def test_ensure_pm_dawn_ignored_handles_non_git_repo(self) -> None:
@@ -461,14 +531,22 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / ".git").mkdir()
-            payload = implement_common.ensure_pm_dawn_ignored(root, create_gitignore=True)
+            payload = implement_common.ensure_pm_dawn_ignored(
+                root, create_gitignore=True
+            )
             self.assertEqual("created_gitignore", payload["status"])
-            self.assertEqual(".pm-dawn/\n", (root / ".gitignore").read_text(encoding="utf-8"))
+            self.assertEqual(
+                ".pm-dawn/\n", (root / ".gitignore").read_text(encoding="utf-8")
+            )
 
-    def test_ensure_pm_dawn_ignored_does_not_create_gitignore_outside_git_repo(self) -> None:
+    def test_ensure_pm_dawn_ignored_does_not_create_gitignore_outside_git_repo(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            payload = implement_common.ensure_pm_dawn_ignored(root, create_gitignore=True)
+            payload = implement_common.ensure_pm_dawn_ignored(
+                root, create_gitignore=True
+            )
             self.assertEqual("not_git_repo", payload["status"])
             self.assertFalse((root / ".gitignore").exists())
 
@@ -477,11 +555,17 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
             self.assertEqual("/bin/sh", implement_common.resolved_shell_executable())
 
     def test_provider_timeout_seconds_falls_back_on_invalid_env(self) -> None:
-        with mock.patch.dict("os.environ", {"PM_DAWN_PROVIDER_TIMEOUT_SECONDS": "not-a-number"}, clear=False):
+        with mock.patch.dict(
+            "os.environ",
+            {"PM_DAWN_PROVIDER_TIMEOUT_SECONDS": "not-a-number"},
+            clear=False,
+        ):
             self.assertEqual(2.0, implement_common.provider_timeout_seconds())
 
     def test_pi_runner_script_uses_resolved_shell_for_keepalive(self) -> None:
-        with mock.patch.object(implement_common, "resolved_shell_executable", return_value="/bin/sh"):
+        with mock.patch.object(
+            implement_common, "resolved_shell_executable", return_value="/bin/sh"
+        ):
             script = implement_common.pi_runner_script(
                 root=Path("/tmp/repo"),
                 session_dir=Path("/tmp/repo/.pm-dawn/pi"),
@@ -491,7 +575,9 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
         self.assertIn("exec /bin/sh -i", script)
 
     def test_pi_runner_script_uses_zsh_pipeline_status_when_shell_is_zsh(self) -> None:
-        with mock.patch.object(implement_common, "resolved_shell_executable", return_value="/bin/zsh"):
+        with mock.patch.object(
+            implement_common, "resolved_shell_executable", return_value="/bin/zsh"
+        ):
             script = implement_common.pi_runner_script(
                 root=Path("/tmp/repo"),
                 session_dir=Path("/tmp/repo/.pm-dawn/pi"),
@@ -499,14 +585,62 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
             )
         self.assertIn("runner_exit=${pipestatus[1]:-0};", script)
 
-    def test_pi_runner_script_uses_bash_pipeline_status_when_shell_is_bash(self) -> None:
-        with mock.patch.object(implement_common, "resolved_shell_executable", return_value="/bin/bash"):
+    def test_pi_runner_script_uses_bash_pipeline_status_when_shell_is_bash(
+        self,
+    ) -> None:
+        with mock.patch.object(
+            implement_common, "resolved_shell_executable", return_value="/bin/bash"
+        ):
             script = implement_common.pi_runner_script(
                 root=Path("/tmp/repo"),
                 session_dir=Path("/tmp/repo/.pm-dawn/pi"),
                 command="pi --print 'prompt'",
             )
         self.assertIn("runner_exit=${PIPESTATUS[0]:-0};", script)
+
+    def test_require_cli_failure_in_epic_slice_implement_common_raises_with_clear_message(
+        self,
+    ) -> None:
+        with self.assertRaises(RuntimeError) as ctx:
+            implement_common.require_cli("nonexistent-cli-xyz")
+        self.assertIn(
+            "required CLI 'nonexistent-cli-xyz' not found", str(ctx.exception)
+        )
+
+    def test_run_cmd_failure_in_epic_slice_implement_common_raises_for_missing_command(
+        self,
+    ) -> None:
+        with self.assertRaises(RuntimeError) as ctx:
+            implement_common.run_cmd(["nonexistent-cmd-xyz"])
+        self.assertIn(
+            "required CLI 'nonexistent-cmd-xyz' not found", str(ctx.exception)
+        )
+
+    def test_resolved_shell_executable_falls_back_when_pm_dawn_shell_invalid(
+        self,
+    ) -> None:
+        with mock.patch.dict(
+            "os.environ", {"PM_DAWN_SHELL": "/bin/nonexistent"}, clear=False
+        ):
+            shell = implement_common.resolved_shell_executable()
+            self.assertIn("/", shell)
+            self.assertNotEqual("/bin/nonexistent", shell)
+
+    def test_pi_runner_script_uses_generic_pipeline_status_for_non_bash_non_zsh_shell(
+        self,
+    ) -> None:
+        with mock.patch.object(
+            implement_common,
+            "resolved_shell_executable",
+            return_value="/usr/local/bin/dash",
+        ):
+            script = implement_common.pi_runner_script(
+                root=Path("/tmp/repo"),
+                session_dir=Path("/tmp/repo/.pm-dawn/pi"),
+                command="pi --print 'prompt'",
+            )
+        self.assertIn("runner_exit=${?:-0};", script)
+        self.assertIn("/usr/local/bin/dash", script)
 
 
 if __name__ == "__main__":
