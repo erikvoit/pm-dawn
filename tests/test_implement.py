@@ -731,6 +731,15 @@ class TestRuntimeHelpers(unittest.TestCase):
             shell = runtime.resolved_shell_executable()
             self.assertIn("/", shell)
 
+    def test_resolved_shell_executable_skips_non_executable_match(self) -> None:
+        with mock.patch.dict(
+            "os.environ", {"PM_DAWN_SHELL": "/tmp/not-executable", "SHELL": ""},
+            clear=True
+        ):
+            with mock.patch("shutil.which", side_effect=["/tmp/not-executable", "/bin/sh"]):
+                with mock.patch("os.access", side_effect=[False, True]):
+                    self.assertEqual("/bin/sh", runtime.resolved_shell_executable())
+
     def test_resolved_shell_executable_raises_when_no_shell_available(self) -> None:
         with mock.patch.dict(
             "os.environ", {"PM_DAWN_SHELL": "", "SHELL": ""}, clear=True
@@ -739,6 +748,19 @@ class TestRuntimeHelpers(unittest.TestCase):
                 with self.assertRaises(RuntimeError) as ctx:
                     runtime.resolved_shell_executable()
                 self.assertIn("no usable shell found", str(ctx.exception))
+
+    def test_run_cmd_includes_exit_code_when_process_has_no_output(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=["example", "arg with spaces"],
+            returncode=7,
+            stdout="",
+            stderr="",
+        )
+        with mock.patch("subprocess.run", return_value=completed):
+            with self.assertRaises(RuntimeError) as ctx:
+                runtime.run_cmd(["example", "arg with spaces"])
+        self.assertIn("exit code 7", str(ctx.exception))
+        self.assertIn("arg with spaces", str(ctx.exception))
 
     def test_epic_slice_plan_tracked_files_uses_shared_run_cmd(self) -> None:
         completed = subprocess.CompletedProcess(

@@ -236,7 +236,7 @@ def run_cmd(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subp
         raise RuntimeError(
             proc.stderr.strip()
             or proc.stdout.strip()
-            or f"command failed: {shlex.join(cmd)}"
+            or f"command failed with exit code {proc.returncode}: {shlex.join(cmd)}"
         )
     return proc
 
@@ -268,6 +268,6 @@ def resolved_shell_executable() -> str:
     for candidate in candidates:
         if candidate:
             resolved = shutil.which(str(Path(candidate).expanduser()))
-            if resolved:
+            if resolved and os.access(resolved, os.X_OK):
                 return resolved
     raise RuntimeError("no usable shell found; set PM_DAWN_SHELL to an available shell executable")
