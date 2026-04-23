@@ -25,6 +25,7 @@ CLEANUP_SLICE_BY_NAME = REPO_ROOT / "epic-slice-implement" / "scripts" / "cleanu
 GENERATE_PACKET_IMPLEMENTATION_PLAN = (
     REPO_ROOT / "epic-slice-implement" / "scripts" / "generate_packet_implementation_plan.py"
 )
+COORDINATE_PLAN_REVIEW = REPO_ROOT / "epic-slice-implement" / "scripts" / "coordinate_plan_review.py"
 MIGRATE_PM_DAWN_LAYOUT = REPO_ROOT / "epic-slice-implement" / "scripts" / "migrate_pm_dawn_layout.py"
 
 
@@ -48,7 +49,11 @@ def build_slice_fixture(root: Path, *, epic_key: str = "RPVINF-124", group_id: s
             f"{group_id}__01_contract.body.md",
             f"{group_id}__01_contract.verify.json",
         ],
-        "ops/artifacts": [f"{group_id}__01_contract.implementation-plan.md"],
+        "ops/artifacts": [
+            f"{group_id}__01_contract.implementation-plan.md",
+            f"{group_id}__01_contract.plan-proposal.md",
+            f"{group_id}__01_contract.plan-review.json",
+        ],
         "ops/runs": [f"{group_id}.json", f"{group_id}.plan.md", f"{group_id}.result.md"],
     }
     for directory, filenames in fixture_files.items():
@@ -85,7 +90,7 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertEqual("RPVINF-124", payload["epic_key"])
             self.assertEqual("consumer_enablement_3", payload["group_id"])
             self.assertTrue(payload["dry_run"])
-            self.assertEqual(15, payload["target_count"])
+            self.assertEqual(17, payload["target_count"])
             archived_paths = {str(Path(item).resolve()) for item in payload["archived"]}
             self.assertIn(
                 str(
@@ -121,7 +126,7 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
 
             payload = json.loads(result.stdout)
             self.assertEqual("RPVINF-124", payload["resolved_epic_key"])
-            self.assertEqual(15, payload["target_count"])
+            self.assertEqual(17, payload["target_count"])
             target_paths = {str(Path(item).resolve()) for item in payload["targets"]}
             self.assertIn(
                 str((root / ".pm-dawn" / "epics" / "RPVINF-124" / "packets" / "consumer_enablement_3__02_wiring.md").resolve()),
@@ -228,9 +233,114 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
     def test_generate_packet_implementation_plan_help_uses_shared_description(self) -> None:
         result = self.run_script(GENERATE_PACKET_IMPLEMENTATION_PLAN, "--help")
         self.assertIn(
-            "Generate a reviewed packet implementation-plan artifact.",
+            "Generate a worker-authored packet plan proposal artifact.",
             result.stdout,
         )
+
+    def test_coordinate_plan_review_accept_copies_proposal_to_implementation_brief(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            proposal = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "artifacts"
+                / "consumer_enablement_3__01_contract.plan-proposal.md"
+            )
+            write_fixture(proposal, "# accepted plan\n")
+
+            result = self.run_script(
+                COORDINATE_PLAN_REVIEW,
+                "RPVINF-124",
+                "consumer_enablement_3",
+                "consumer_enablement_3__01_contract",
+                "--repo-root",
+                str(root),
+                "--action",
+                "accept",
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual("accepted", payload["status"])
+            implementation_brief = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "artifacts"
+                / "consumer_enablement_3__01_contract.implementation-plan.md"
+            )
+            self.assertEqual("# accepted plan\n", implementation_brief.read_text(encoding="utf-8"))
+            state = json.loads(
+                (
+                    root
+                    / ".pm-dawn"
+                    / "epics"
+                    / "RPVINF-124"
+                    / "ops"
+                    / "artifacts"
+                    / "consumer_enablement_3__01_contract.plan-review.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual("accepted", state["status"])
+            self.assertEqual(str(implementation_brief.resolve()), state["implementation_plan_artifact"])
+
+    def test_slice_status_includes_plan_review_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            run_metadata = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "runs"
+                / "consumer_enablement_3.json"
+            )
+            write_fixture(
+                run_metadata,
+                json.dumps(
+                    {
+                        "schema_version": "v1",
+                        "epic_key": "RPVINF-124",
+                        "group_id": "consumer_enablement_3",
+                        "packet_id": "consumer_enablement_3__02_wiring",
+                        "harness": "pi",
+                        "runtime_mode": "tmux-run",
+                        "status": "pending_review",
+                        "phase": "implementing",
+                        "completion_state": "in_progress",
+                        "runtime": {},
+                        "worker": {"status": "pending_review"},
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+            write_fixture(
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "artifacts"
+                / "consumer_enablement_3__02_wiring.plan-review.json",
+                json.dumps({"status": "changes_requested"}, indent=2) + "\n",
+            )
+
+            result = self.run_script(
+                SLICE_STATUS,
+                "RPVINF-124",
+                "consumer_enablement_3",
+                "--repo-root",
+                str(root),
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual("changes_requested", payload["plan_review"]["status"])
 
     def test_migrate_pm_dawn_layout_dry_run_reports_canonical_follow_up_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

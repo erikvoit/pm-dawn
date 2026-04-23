@@ -10,8 +10,9 @@ Preferred phase split:
 - packet-plan run:
   - use the OpenCode `packet-implementation-plan` skill
   - read the packet Markdown
-  - write `ops/artifacts/<packet-id>.implementation-plan.md`
+  - write `ops/artifacts/<packet-id>.plan-proposal.md`
   - do not treat the run as successful unless that file exists at the end
+  - initialize or update `ops/artifacts/<packet-id>.plan-review.json`
   - treat the written artifact as a worker-authored draft for review, not as self-approving authority
 - `planning` run:
   - read the handoff
@@ -27,7 +28,12 @@ Packet-first execution path:
 - packet Markdown is canonical
 - compile the selected packet Markdown into `ops/handoffs/<packet-id>.json` immediately before launch
 - do not keep packet JSON as a manually maintained companion artifact
-- when present, use `ops/artifacts/<packet-id>.implementation-plan.md` as the reviewed implementation brief
+- plan negotiation happens through:
+  - `ops/artifacts/<packet-id>.plan-proposal.md`
+  - `ops/artifacts/<packet-id>.plan-review.md`
+  - `ops/artifacts/<packet-id>.plan-response.md`
+  - `ops/artifacts/<packet-id>.plan-review.json`
+- only when `plan-review.json` records `status=accepted`, use `ops/artifacts/<packet-id>.implementation-plan.md` as the reviewed implementation brief
 - for these runs:
   - packet Markdown remains authoritative for scope and constraints
   - reviewed implementation plan remains authoritative for implementation approach
@@ -51,7 +57,7 @@ Completion/result flow:
   - `worker.status: pending_review`
   - this means “the worker believes the packet is ready for review”
   - it does not mean the packet is accepted
-- in the common Codex-Pi flow, Codex reviews Pi-authored plans rather than directly editing the worker's in-flight implementation session into a new scope
+- in the common Codex-Pi flow, Codex reviews Pi-authored proposals, may request changes, and explicitly accepts the brief before implementation launch
 - when a phase finishes cleanly, capture the final assistant output into:
   - `<group-id>.plan.md` for planning
   - `<group-id>.result.md` for implementation

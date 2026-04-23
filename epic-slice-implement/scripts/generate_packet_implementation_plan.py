@@ -18,8 +18,9 @@ from common import (
 from harness_opencode import run_packet_planning as run_opencode_packet_planning
 from harness_pi import run_packet_planning as run_pi_packet_planning
 from pm_dawn_core.implement import (
-    implementation_plan_artifact_path,
+    initialize_packet_plan_review_state,
     packet_markdown_path,
+    packet_plan_proposal_artifact_path,
     render_implement_command,
     resolve_agent_harness,
     resolve_harness_model,
@@ -59,28 +60,31 @@ def main() -> None:
     )
     model_check = check_active_harness_model(harness, model)
     packet_path = packet_markdown_path(root, args.epic_key, args.packet_id)
-    output_path = implementation_plan_artifact_path(root, args.epic_key, args.packet_id)
+    output_path = packet_plan_proposal_artifact_path(root, args.epic_key, args.packet_id)
 
     if not packet_path.exists():
         raise SystemExit(f"packet Markdown not found: {packet_path}")
 
     title = args.title or f"packet-plan:{args.epic_key}:{args.packet_id}"
-    reviewed_artifact_command = render_implement_command(
+    proposal_review_command = render_implement_command(
         root,
-        "plan",
+        "review-plan",
         args.epic_key,
         args.group_id,
         args.packet_id,
+        "--action",
+        "accept",
         "--repo-root",
         ".",
     )
     prompt = (
         "Use the packet-implementation-plan skill. "
-        f"Read {packet_path} and produce the implementation plan only. "
+        f"Read {packet_path} and produce the implementation plan proposal only. "
         f"Write it to {output_path}. "
         "Do not edit code, do not switch branches, and do not implement the packet. "
         "This run is not successful unless the plan file exists at the required path when you finish. "
-        f"The canonical PM Dawn command surface for this action is: {reviewed_artifact_command}"
+        "Treat the written artifact as a worker-authored proposal for reviewer negotiation, not as a self-approved brief. "
+        f"The canonical PM Dawn acceptance command for this action is: {proposal_review_command}"
     )
 
     if harness == "pi":
@@ -118,6 +122,8 @@ def main() -> None:
             model_check=model_check,
             packet_path=packet_path,
         )
+    if output_path.exists():
+        initialize_packet_plan_review_state(root, args.epic_key, args.packet_id)
 
 
 if __name__ == "__main__":

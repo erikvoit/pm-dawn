@@ -47,6 +47,7 @@ Important examples:
 - `load_handoff.py`
 - `build_opencode_prompt.py`
 - `generate_packet_implementation_plan.py`
+- `coordinate_plan_review.py`
 - `launch_slice_session.py`
 - `slice_status.py`
 - `mark_slice_pending_review.py`
@@ -58,10 +59,11 @@ Compatibility wrappers or harness-specific shortcuts may exist later, but docs a
 PM Dawn supports a plan-first and review-centered execution loop.
 
 The intended contract is:
-- a worker harness, often Pi, may produce a packet-specific `.implementation-plan.md`
-- that worker-authored plan is a draft for review, not the final authority on scope
-- Codex or another reviewer reviews and tightens that plan before implementation begins
-- implementation then starts from the reviewed implementation brief plus the packet handoff
+- a worker harness, often Pi, may produce a packet-specific `.plan-proposal.md`
+- that worker-authored proposal is a draft for review, not the final authority on scope
+- Codex or another reviewer reviews and tightens that proposal, recording comments and responses as first-class artifacts
+- only explicit acceptance materializes the `.implementation-plan.md` used for implementation
+- implementation then starts from the accepted implementation brief plus the packet handoff
 - during implementation, the worker may mark `worker.status=pending_review`
 - `pending_review` is only a worker claim that the packet is ready for review
 - reviewer acceptance remains the authority for completion

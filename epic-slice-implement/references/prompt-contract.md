@@ -6,6 +6,7 @@ The launch prompt must always:
 - name the `.pm-dawn` handoff path
 - state that the handoff is authoritative
 - when present, name the reviewed `.implementation-plan.md` path and explain its role
+- when packet negotiation artifacts exist, make it clear that implementation is starting only after explicit reviewer acceptance
 - require the worker to stay on the current branch
 - forbid branch creation and branch switching
 - forbid widening scope
@@ -30,9 +31,10 @@ Launch prompts should include:
 - for reviewed packet implementation briefs, language that makes the reviewer-approved brief authoritative for implementation approach rather than treating the worker's earlier draft as final
 
 Packet-plan runs should:
-- require the planning skill to write the `.implementation-plan.md` artifact
+- require the planning skill to write the `.plan-proposal.md` artifact
 - be considered failed if the run returns without that artifact existing on disk
-- treat the resulting artifact as review input that Codex or another reviewer can accept, tighten, or reject before implementation launch
+- treat the resulting artifact as review input that Codex or another reviewer can comment on, reject, or accept before implementation launch
+- never imply that a worker-authored proposal is already accepted just because the file exists
 
 Steer prompts should include:
 - the same handoff path

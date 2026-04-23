@@ -105,6 +105,22 @@ def implementation_plan_artifact_path(root: Path, epic_key: str, packet_id: str)
     return artifacts_root(root, epic_key) / f"{packet_id}.implementation-plan.md"
 
 
+def packet_plan_proposal_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
+    return artifacts_root(root, epic_key) / f"{packet_id}.plan-proposal.md"
+
+
+def packet_plan_review_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
+    return artifacts_root(root, epic_key) / f"{packet_id}.plan-review.md"
+
+
+def packet_plan_response_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
+    return artifacts_root(root, epic_key) / f"{packet_id}.plan-response.md"
+
+
+def packet_plan_review_state_path(root: Path, epic_key: str, packet_id: str) -> Path:
+    return artifacts_root(root, epic_key) / f"{packet_id}.plan-review.json"
+
+
 def legacy_opencode_plan_artifact_path(root: Path, epic_key: str, packet_id: str) -> Path:
     return artifacts_root(root, epic_key) / f"{packet_id}.opencode-plan.md"
 
