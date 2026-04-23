@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -232,7 +233,11 @@ def run_cmd(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subp
     except FileNotFoundError as exc:
         raise RuntimeError(f"required CLI '{cmd[0]}' not found in PATH") from exc
     if check and proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"command failed: {' '.join(cmd)}")
+        raise RuntimeError(
+            proc.stderr.strip()
+            or proc.stdout.strip()
+            or f"command failed: {shlex.join(cmd)}"
+        )
     return proc
 
 
@@ -261,12 +266,8 @@ def resolved_shell_executable() -> str:
         "sh",
     ]
     for candidate in candidates:
-        if not candidate:
-            continue
-        path = Path(candidate).expanduser()
-        if path.is_absolute() and path.exists():
-            return str(path)
-        resolved = shutil.which(candidate)
-        if resolved:
-            return resolved
+        if candidate:
+            resolved = shutil.which(str(Path(candidate).expanduser()))
+            if resolved:
+                return resolved
     raise RuntimeError("no usable shell found; set PM_DAWN_SHELL to an available shell executable")

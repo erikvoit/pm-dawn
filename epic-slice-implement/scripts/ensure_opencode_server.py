@@ -28,7 +28,8 @@ def main() -> None:
     if not tmux_has_session(session_name):
         cmd = (
             f"cd {shlex.quote(str(root))} && "
-            f"opencode serve --hostname {shlex.quote(args.hostname)} --port {args.port}"
+            f"opencode serve --hostname {shlex.quote(args.hostname)} "
+            f"--port {shlex.quote(str(args.port))}"
         )
         run_cmd(["tmux", "new-session", "-d", "-s", session_name, cmd])
         started = True
