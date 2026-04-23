@@ -22,15 +22,13 @@ from pm_dawn_core.implement import (
     initialize_packet_plan_review_state,
     packet_markdown_path,
     packet_plan_monitor_state,
-    packet_plan_proposal_artifact_path,
-    packet_plan_response_artifact_path,
     render_implement_command,
     resolve_agent_harness,
     resolve_harness_model,
     resolve_implement_command,
     resolve_packet_plan_review_state,
 )
-from pm_dawn_core.layout import packet_plan_review_artifact_path, packet_plan_review_state_path
+from pm_dawn_core.layout import packet_plan_artifacts
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,6 +63,7 @@ def main() -> None:
     )
     model_check = check_active_harness_model(harness, model)
     packet_path = packet_markdown_path(root, args.epic_key, args.packet_id)
+    artifacts = packet_plan_artifacts(root, args.epic_key, args.packet_id)
     review_state = resolve_packet_plan_review_state(root, args.epic_key, args.packet_id)
     monitor_state = packet_plan_monitor_state(
         root,
@@ -84,11 +83,7 @@ def main() -> None:
         )
 
     revision_mode = bool(monitor_state["requires_revision_run"])
-    output_path = (
-        packet_plan_response_artifact_path(root, args.epic_key, args.packet_id)
-        if revision_mode
-        else packet_plan_proposal_artifact_path(root, args.epic_key, args.packet_id)
-    )
+    output_path = artifacts.response_md if revision_mode else artifacts.proposal_md
 
     if not packet_path.exists():
         raise SystemExit(f"packet Markdown not found: {packet_path}")
@@ -106,7 +101,7 @@ def main() -> None:
         ".",
     )
     if revision_mode:
-        review_artifact = packet_plan_review_artifact_path(root, args.epic_key, args.packet_id)
+        review_artifact = artifacts.review_md
         if not review_artifact.exists():
             raise SystemExit(
                 "packet plan revision is requested but no plan review artifact exists for the current packet"
@@ -169,7 +164,7 @@ def main() -> None:
         )
     if output_path.exists():
         if revision_mode:
-            state_path = packet_plan_review_state_path(root, args.epic_key, args.packet_id)
+            state_path = artifacts.review_state_json
             updated_state = dict(review_state or {})
             updated_state.update(
                 {
