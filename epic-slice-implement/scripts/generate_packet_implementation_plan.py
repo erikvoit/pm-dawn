@@ -12,20 +12,25 @@ if str(ROOT) not in sys.path:
 
 from common import (
     check_active_harness_model,
-    emit_json,
+    now_iso,
     repo_root,
+    write_json,
 )
 from harness_opencode import run_packet_planning as run_opencode_packet_planning
 from harness_pi import run_packet_planning as run_pi_packet_planning
 from pm_dawn_core.implement import (
     initialize_packet_plan_review_state,
     packet_markdown_path,
+    packet_plan_monitor_state,
     packet_plan_proposal_artifact_path,
+    packet_plan_response_artifact_path,
     render_implement_command,
     resolve_agent_harness,
     resolve_harness_model,
     resolve_implement_command,
+    resolve_packet_plan_review_state,
 )
+from pm_dawn_core.layout import packet_plan_review_artifact_path, packet_plan_review_state_path
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,7 +65,30 @@ def main() -> None:
     )
     model_check = check_active_harness_model(harness, model)
     packet_path = packet_markdown_path(root, args.epic_key, args.packet_id)
-    output_path = packet_plan_proposal_artifact_path(root, args.epic_key, args.packet_id)
+    review_state = resolve_packet_plan_review_state(root, args.epic_key, args.packet_id)
+    monitor_state = packet_plan_monitor_state(
+        root,
+        args.epic_key,
+        args.packet_id,
+        state=review_state,
+    )
+    if monitor_state["accepted"]:
+        raise SystemExit("packet plan review is already accepted; no new planning run is required")
+    if review_state is not None and review_state.get("status") == "response_submitted":
+        raise SystemExit(
+            "packet plan response is already submitted; wait for reviewer action before re-running planning"
+        )
+    if review_state is not None and review_state.get("status") == "rejected":
+        raise SystemExit(
+            "packet plan review is rejected; clear or replace the review state before re-running planning"
+        )
+
+    revision_mode = bool(monitor_state["requires_revision_run"])
+    output_path = (
+        packet_plan_response_artifact_path(root, args.epic_key, args.packet_id)
+        if revision_mode
+        else packet_plan_proposal_artifact_path(root, args.epic_key, args.packet_id)
+    )
 
     if not packet_path.exists():
         raise SystemExit(f"packet Markdown not found: {packet_path}")
@@ -77,15 +105,32 @@ def main() -> None:
         "--repo-root",
         ".",
     )
-    prompt = (
-        "Use the packet-implementation-plan skill. "
-        f"Read {packet_path} and produce the implementation plan proposal only. "
-        f"Write it to {output_path}. "
-        "Do not edit code, do not switch branches, and do not implement the packet. "
-        "This run is not successful unless the plan file exists at the required path when you finish. "
-        "Treat the written artifact as a worker-authored proposal for reviewer negotiation, not as a self-approved brief. "
-        f"The canonical PM Dawn acceptance command for this action is: {proposal_review_command}"
-    )
+    if revision_mode:
+        review_artifact = packet_plan_review_artifact_path(root, args.epic_key, args.packet_id)
+        if not review_artifact.exists():
+            raise SystemExit(
+                "packet plan revision is requested but no plan review artifact exists for the current packet"
+            )
+        prompt = (
+            "Use the packet-implementation-plan skill. "
+            f"Read {packet_path}. "
+            f"Read the current review feedback at {review_artifact}. "
+            f"Produce the revised implementation plan response only and write it to {output_path}. "
+            "Do not edit code, do not switch branches, and do not implement the packet. "
+            "This run is not successful unless the response file exists at the required path when you finish. "
+            "Treat the written artifact as a worker-authored response for reviewer negotiation, not as a self-approved brief. "
+            f"The canonical PM Dawn acceptance command for this action is: {proposal_review_command}"
+        )
+    else:
+        prompt = (
+            "Use the packet-implementation-plan skill. "
+            f"Read {packet_path} and produce the implementation plan proposal only. "
+            f"Write it to {output_path}. "
+            "Do not edit code, do not switch branches, and do not implement the packet. "
+            "This run is not successful unless the plan file exists at the required path when you finish. "
+            "Treat the written artifact as a worker-authored proposal for reviewer negotiation, not as a self-approved brief. "
+            f"The canonical PM Dawn acceptance command for this action is: {proposal_review_command}"
+        )
 
     if harness == "pi":
         session_dir = (
@@ -123,7 +168,28 @@ def main() -> None:
             packet_path=packet_path,
         )
     if output_path.exists():
-        initialize_packet_plan_review_state(root, args.epic_key, args.packet_id)
+        if revision_mode:
+            state_path = packet_plan_review_state_path(root, args.epic_key, args.packet_id)
+            updated_state = dict(review_state or {})
+            updated_state.update(
+                {
+                    "schema_version": "v1",
+                    "epic_key": args.epic_key,
+                    "group_id": args.group_id,
+                    "packet_id": args.packet_id,
+                    "status": "response_submitted",
+                    "response_artifact": str(output_path.resolve()),
+                    "current_artifact": str(output_path.resolve()),
+                    "submitted_artifact": str(output_path.resolve()),
+                    "accepted_artifact": None,
+                    "accepted_at": None,
+                    "last_action": "response_submitted",
+                    "updated": now_iso(),
+                }
+            )
+            write_json(state_path, updated_state)
+        else:
+            initialize_packet_plan_review_state(root, args.epic_key, args.packet_id)
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ from common import (
     session_runtime_status,
 )
 from pm_dawn_core.layout import run_metadata_path
-from pm_dawn_core.implement import resolve_packet_plan_review_state
+from pm_dawn_core.implement import packet_plan_monitor_state, resolve_packet_plan_review_state
 from pm_dawn_core.profile import repo_root
 
 
@@ -41,6 +41,11 @@ def main() -> None:
     packet_id = data.get("packet_id")
     plan_review = (
         resolve_packet_plan_review_state(root, args.epic_key, packet_id)
+        if isinstance(packet_id, str) and packet_id
+        else None
+    )
+    plan_monitor = (
+        packet_plan_monitor_state(root, args.epic_key, packet_id, state=plan_review)
         if isinstance(packet_id, str) and packet_id
         else None
     )
@@ -87,6 +92,7 @@ def main() -> None:
         "branch_name": data.get("branch_name"),
         "packet_id": data.get("packet_id"),
         "plan_review": plan_review,
+        "plan_monitor": plan_monitor,
         "handoff_path": data.get("handoff_path"),
         "last_action": data.get("last_action"),
         "artifacts": data.get("artifacts", {}),
