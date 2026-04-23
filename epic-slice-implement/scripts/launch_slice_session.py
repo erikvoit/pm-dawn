@@ -187,6 +187,18 @@ def main() -> None:
         payload["approved_plan"] = str(approved_plan)
     payload["monitoring"] = harness_monitoring_settings(root, harness)
 
+    if args.dry_run:
+        if harness == "pi":
+            payload["runtime_mode"] = "tmux-run"
+            payload["attach_instructions"] = pi_attach_instructions(None)
+        elif args.runtime == "server":
+            payload["server_url"] = args.server_url
+            payload["attach_instructions"] = attach_instructions(args.server_url, None, None, root)
+        else:
+            payload["attach_instructions"] = attach_instructions(None, None, None, root)
+        emit_json(payload)
+        return
+
     if harness == "opencode" and args.runtime == "server":
         require_cli("opencode")
         parsed = urlparse(args.server_url)
@@ -207,14 +219,6 @@ def main() -> None:
             server_data = {"server_url": args.server_url, "tmux_session": server_session, "status": "already_running"}
         payload["server_url"] = server_data["server_url"]
         payload["server_tmux_session"] = server_data["tmux_session"]
-    if args.dry_run:
-        if harness == "pi":
-            payload["runtime_mode"] = "tmux-run"
-            payload["attach_instructions"] = pi_attach_instructions(None)
-        else:
-            payload["attach_instructions"] = attach_instructions(payload["server_url"], None, None, root)
-        emit_json(payload)
-        return
 
     if harness == "pi":
         require_cli("pi")
