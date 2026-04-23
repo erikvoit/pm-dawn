@@ -288,6 +288,32 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertEqual("accepted", state["status"])
             self.assertEqual(str(implementation_brief.resolve()), state["implementation_plan_artifact"])
 
+    def test_coordinate_plan_review_submit_review_requires_existing_custom_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(COORDINATE_PLAN_REVIEW),
+                    "RPVINF-124",
+                    "consumer_enablement_3",
+                    "consumer_enablement_3__01_contract",
+                    "--repo-root",
+                    str(root),
+                    "--action",
+                    "submit-review",
+                    "--artifact",
+                    str(root / "missing-review.md"),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("plan review artifact not found", result.stderr)
+
     def test_slice_status_includes_plan_review_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

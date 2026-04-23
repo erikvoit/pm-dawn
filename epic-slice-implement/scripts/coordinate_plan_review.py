@@ -43,14 +43,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def canonical_artifact_for_action(root: Path, epic_key: str, packet_id: str, action: str) -> Path | None:
-    if action == "submit-review":
-        return packet_plan_review_artifact_path(root, epic_key, packet_id)
-    if action == "submit-response":
-        return packet_plan_response_artifact_path(root, epic_key, packet_id)
-    return None
-
-
 def load_state(root: Path, epic_key: str, packet_id: str) -> tuple[dict, Path]:
     state_path = packet_plan_review_state_path(root, epic_key, packet_id)
     existing = resolve_packet_plan_review_state(root, epic_key, packet_id)
@@ -85,7 +77,11 @@ def main() -> None:
     current_time = now_iso()
 
     if args.action == "submit-review":
-        artifact = Path(args.artifact).resolve() if args.artifact else require_artifact(review_path, "plan review artifact")
+        artifact = (
+            require_artifact(Path(args.artifact), "plan review artifact")
+            if args.artifact
+            else require_artifact(review_path, "plan review artifact")
+        )
         state["status"] = "changes_requested"
         state["review_artifact"] = str(artifact)
         state["current_artifact"] = str(artifact)
@@ -93,7 +89,11 @@ def main() -> None:
         state["accepted_at"] = None
         state["last_action"] = "review_submitted"
     elif args.action == "submit-response":
-        artifact = Path(args.artifact).resolve() if args.artifact else require_artifact(response_path, "plan response artifact")
+        artifact = (
+            require_artifact(Path(args.artifact), "plan response artifact")
+            if args.artifact
+            else require_artifact(response_path, "plan response artifact")
+        )
         state["status"] = "response_submitted"
         state["response_artifact"] = str(artifact)
         state["current_artifact"] = str(artifact)
