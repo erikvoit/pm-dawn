@@ -259,7 +259,7 @@ Required inputs depend on the phase:
 - **Epic review** needs Jira access plus a repo root.
 - **Slice planning** needs an existing slice Markdown handoff.
 - **Packet planning** needs a packet Markdown file.
-- **Implementation launch** needs either a slice handoff or a packet plus any reviewed implementation brief.
+- **Implementation launch** needs either a slice handoff or a packet plus any reviewer-accepted implementation brief.
 
 Assumptions:
 
@@ -278,6 +278,10 @@ Typical outputs include:
 .pm-dawn/epics/<epic-key>/plans/<group-id>.plan.md
 .pm-dawn/epics/<epic-key>/packets/<packet-id>.md
 .pm-dawn/epics/<epic-key>/ops/handoffs/<packet-id>.json
+.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-proposal.md
+.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-review.md
+.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-response.md
+.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-review.json
 .pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.implementation-plan.md
 .pm-dawn/epics/<epic-key>/ops/runs/<group-id>.json
 .pm-dawn/epics/<epic-key>/ops/runs/<group-id>.plan.md
@@ -289,7 +293,8 @@ Determinism expectations:
 
 - Packet Markdown is canonical.
 - Compiled packet JSON is generated at launch time and should be treated as disposable.
-- Reviewed implementation briefs are durable.
+- Packet plan negotiation artifacts are durable review history.
+- Reviewer-accepted implementation briefs are durable execution input.
 - Run metadata and captured plan / result artifacts are the durable execution record.
 
 ---
@@ -304,6 +309,7 @@ Canonical command surface:
 python "epic-slice-implement/scripts/load_handoff.py" <epic-key> <group-id> --repo-root .
 python "epic-slice-implement/scripts/build_opencode_prompt.py" <epic-key> <group-id> --repo-root .
 python "epic-slice-implement/scripts/generate_packet_implementation_plan.py" <epic-key> <group-id> <packet-id> --repo-root .
+python "epic-slice-implement/scripts/coordinate_plan_review.py" <epic-key> <group-id> <packet-id> --action accept --repo-root .
 python "epic-slice-implement/scripts/launch_slice_session.py" <epic-key> <group-id> --repo-root .
 python "epic-slice-implement/scripts/slice_status.py" <epic-key> <group-id> --repo-root .
 ```
@@ -318,7 +324,8 @@ Expected environment:
 Idempotency and overwrite behavior:
 
 - generated plan and packet artifacts overwrite prior versions when regenerated
-- reviewed implementation briefs overwrite prior drafts for the same packet
+- packet plan proposals, reviews, and responses overwrite their own prior draft for the same packet
+- reviewer acceptance copies the accepted source into the canonical `.implementation-plan.md`
 - packet JSON is regenerated at launch time
 - run metadata is updated in place
 
@@ -354,7 +361,16 @@ python "epic-slice-implement/scripts/generate_packet_implementation_plan.py" \
   --repo-root .
 ```
 
-Launch implementation from the reviewed brief with `epic-slice-implement`:
+Accept that proposal into the canonical implementation brief:
+
+```bash
+python "epic-slice-implement/scripts/coordinate_plan_review.py" \
+  RPVINF-124 consumer_enablement_6 consumer_enablement_6__01_contract \
+  --action accept \
+  --repo-root .
+```
+
+Launch implementation from the accepted brief with `epic-slice-implement`:
 
 ```bash
 python "epic-slice-implement/scripts/launch_slice_session.py" \
@@ -377,6 +393,8 @@ python "epic-slice-implement/scripts/launch_slice_session.py" \
 ```text
 .pm-dawn/epics/RPVINF-124/plans/consumer_enablement_6.plan.md
 .pm-dawn/epics/RPVINF-124/packets/consumer_enablement_6__01_contract.md
+.pm-dawn/epics/RPVINF-124/ops/artifacts/consumer_enablement_6__01_contract.plan-proposal.md
+.pm-dawn/epics/RPVINF-124/ops/artifacts/consumer_enablement_6__01_contract.plan-review.json
 .pm-dawn/epics/RPVINF-124/ops/artifacts/consumer_enablement_6__01_contract.implementation-plan.md
 .pm-dawn/epics/RPVINF-124/ops/runs/consumer_enablement_6.json
 ```
@@ -398,10 +416,11 @@ python "epic-slice-implement/scripts/launch_slice_session.py" \
 1. Create or identify a Jira epic.
 2. Review that epic into repo-local slice handoffs.
 3. Turn one slice into an approved slice plan plus packets.
-4. Generate a reviewed implementation brief for one packet.
-5. Launch implementation through the chosen harness.
-6. Review the implementation result.
-7. Update PR metadata and sync Jira when the packet or slice is accepted.
+4. Generate a worker-authored plan proposal for one packet.
+5. Review, comment on, and accept that proposal into the implementation brief.
+6. Launch implementation through the chosen harness.
+7. Review the implementation result.
+8. Update PR metadata and sync Jira when the packet or slice is accepted.
 
 ### Upstream Producers
 
@@ -442,7 +461,7 @@ Jira epic
   -> epic-slice-plan
   -> packet
   -> packet-implementation-plan
-  -> reviewed implementation brief
+  -> plan proposal / review / response / acceptance
   -> epic-slice-implement
   -> review
   -> jira-pr / slice-to-jira
@@ -457,6 +476,7 @@ Jira epic
 - treat slice and packet artifacts as the scope boundary
 - prefer packet-first execution when packets exist
 - treat reviewed implementation briefs as authoritative for implementation approach
+- treat packet plan negotiation artifacts as the review loop, not as disposable side chatter
 - keep `.pm-dawn` artifacts repo-local and traceable
 - use the canonical command surface in docs, prompts, and workflow guidance
 - validate work with the repo’s native checks
@@ -465,6 +485,7 @@ Jira epic
 
 - widen scope beyond the slice or packet
 - treat a worker-authored draft plan as self-approved
+- start packet implementation before the plan-review state is explicitly accepted
 - treat `pending_review` as acceptance
 - hand-edit compiled packet JSON as a maintained artifact
 - silently collapse protocol-core behavior and harness-specific behavior into one undocumented seam
@@ -511,6 +532,10 @@ Important path conventions:
 .pm-dawn/epics/<epic-key>/plans/<group-id>.plan.md
 .pm-dawn/epics/<epic-key>/packets/<packet-id>.md
 .pm-dawn/epics/<epic-key>/ops/handoffs/<packet-id>.json
+.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-proposal.md
+.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-review.md
+.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-response.md
+.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-review.json
 .pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.implementation-plan.md
 .pm-dawn/epics/<epic-key>/ops/runs/<group-id>.json
 .pm-dawn/epics/<epic-key>/ops/pr/<group-id>.body.md

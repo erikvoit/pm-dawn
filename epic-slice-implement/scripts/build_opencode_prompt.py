@@ -13,6 +13,7 @@ from pm_dawn_core.implement import (
     build_launch_prompt,
     build_steer_prompt,
     load_execution_input,
+    resolve_approved_plan_path,
     resolve_implement_command,
 )
 from pm_dawn_core.profile import repo_root
@@ -41,7 +42,7 @@ def main() -> None:
             raise SystemExit("--steering-message is required for steer mode")
         prompt = build_steer_prompt(handoff, handoff_path, root, args.steering_message)
     else:
-        approved_plan = Path(args.approved_plan).resolve() if args.approved_plan else None
+        approved_plan = resolve_approved_plan_path(root, args.epic_key, args.packet_id, args.approved_plan)
         prompt = build_launch_prompt(handoff, handoff_path, root, phase=args.phase, approved_plan_path=approved_plan)
     sys.stdout.write(prompt)
     if not prompt.endswith("\n"):

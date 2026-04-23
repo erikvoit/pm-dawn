@@ -37,9 +37,11 @@ from common import (
 from pm_dawn_core.implement import (
     build_launch_prompt,
     load_execution_input,
+    packet_plan_requires_acceptance,
     resolve_agent_harness,
     resolve_approved_plan_path,
     resolve_harness_model,
+    resolve_packet_plan_review_state,
 )
 
 
@@ -130,6 +132,22 @@ def main() -> None:
     handoff, handoff_path = load_execution_input(root, args.epic_key, args.group_id, args.packet_id)
     ignore_state = ensure_pm_dawn_ignored(root)
     approved_plan = resolve_approved_plan_path(root, args.epic_key, args.packet_id, args.approved_plan)
+    review_state = resolve_packet_plan_review_state(root, args.epic_key, args.packet_id) if args.packet_id else None
+    if args.phase == "implementing" and args.packet_id:
+        if args.approved_plan is None and packet_plan_requires_acceptance(root, args.epic_key, args.packet_id):
+            if review_state is None:
+                raise SystemExit(
+                    "packet implementation is blocked: a plan proposal exists but no plan-review state is recorded yet"
+                )
+            if review_state.get("status") != "accepted":
+                raise SystemExit(
+                    "packet implementation is blocked until plan review is accepted; "
+                    f"current status is {review_state.get('status')!r}"
+                )
+        if approved_plan is None and review_state is not None and review_state.get("status") == "accepted":
+            raise SystemExit(
+                "packet plan review is accepted but no reviewer-approved implementation plan artifact is available"
+            )
     prompt = build_launch_prompt(handoff, handoff_path, root, phase=args.phase, approved_plan_path=approved_plan)
     title = slice_title(args.epic_key, args.group_id, args.phase, args.packet_id)
 
@@ -153,6 +171,7 @@ def main() -> None:
         "session_dir": None,
         "attach_instructions": [],
         "title": title,
+        "plan_review": review_state if args.packet_id else None,
     }
     if approved_plan:
         payload["approved_plan"] = str(approved_plan)

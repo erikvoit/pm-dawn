@@ -16,12 +16,21 @@ from pm_dawn_core.implement import (
     build_steer_prompt,
     compile_packet_handoff,
     implement_command_relative_script_path,
+    initialize_packet_plan_review_state,
     load_execution_input,
+    packet_plan_requires_acceptance,
     render_implement_command,
     resolve_agent_harness,
     resolve_harness_model,
     resolve_approved_plan_path,
     resolve_implement_command,
+    resolve_packet_plan_review_state,
+)
+from pm_dawn_core.layout import (
+    implementation_plan_artifact_path,
+    packet_plan_proposal_artifact_path,
+    packet_plan_response_artifact_path,
+    packet_plan_review_state_path,
 )
 
 
@@ -190,6 +199,10 @@ class TestImplementHelpers(unittest.TestCase):
             pending_review,
             resolve_implement_command("mark_slice_pending_review"),
         )
+        self.assertEqual(
+            "coordinate_plan_review.py",
+            resolve_implement_command("review-plan").script_name,
+        )
 
     def test_implement_command_surface_registry_stays_unique(self) -> None:
         command_ids = [surface.command_id for surface in IMPLEMENT_COMMAND_SURFACES]
@@ -343,6 +356,98 @@ class TestImplementHelpers(unittest.TestCase):
             assert plan_path is not None
             self.assertTrue(plan_path.name.endswith(".implementation-plan.md"))
 
+    def test_initialize_packet_plan_review_state_writes_proposal_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            proposal = packet_plan_proposal_artifact_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            proposal.write_text("# proposal\n", encoding="utf-8")
+
+            state_path = initialize_packet_plan_review_state(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual("proposal_submitted", state["status"])
+            self.assertEqual(str(proposal.resolve()), state["proposal_artifact"])
+            self.assertEqual(str(proposal.resolve()), state["current_artifact"])
+
+    def test_resolve_approved_plan_path_requires_accepted_state_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            proposal = packet_plan_proposal_artifact_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            proposal.write_text("# proposal\n", encoding="utf-8")
+            initialize_packet_plan_review_state(root, "RPVINF-124", "consumer_enablement_4__01_contract")
+
+            self.assertTrue(
+                packet_plan_requires_acceptance(
+                    root,
+                    "RPVINF-124",
+                    "consumer_enablement_4__01_contract",
+                )
+            )
+            self.assertIsNone(
+                resolve_approved_plan_path(
+                    root,
+                    "RPVINF-124",
+                    "consumer_enablement_4__01_contract",
+                    None,
+                )
+            )
+
+            accepted = implementation_plan_artifact_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            accepted.write_text("# accepted\n", encoding="utf-8")
+            state_path = packet_plan_review_state_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["status"] = "accepted"
+            state["implementation_plan_artifact"] = str(accepted.resolve())
+            state_path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            resolved = resolve_approved_plan_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+                None,
+            )
+            self.assertEqual(accepted.resolve(), resolved)
+
+    def test_resolve_packet_plan_review_state_reads_state_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            proposal = packet_plan_proposal_artifact_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            proposal.write_text("# proposal\n", encoding="utf-8")
+            initialize_packet_plan_review_state(root, "RPVINF-124", "consumer_enablement_4__01_contract")
+
+            state = resolve_packet_plan_review_state(root, "RPVINF-124", "consumer_enablement_4__01_contract")
+
+            self.assertIsNotNone(state)
+            assert state is not None
+            self.assertEqual("proposal_submitted", state["status"])
+
     def test_build_launch_prompt_includes_reviewed_plan_rules(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
@@ -366,7 +471,7 @@ class TestImplementHelpers(unittest.TestCase):
             )
 
             self.assertIn("approved plan", prompt)
-            self.assertIn("reviewed and corrected implementation brief", prompt)
+            self.assertIn("reviewer-accepted implementation brief", prompt)
             self.assertIn("feature/RPVINF-128-consumer-enablement", prompt)
             self.assertIn("python3 epic-slice-implement/scripts/mark_slice_pending_review.py", prompt)
             self.assertIn("epic-slice-implement/scripts/mark_slice_pending_review.py", prompt)
@@ -437,7 +542,7 @@ class TestImplementCliSmoke(unittest.TestCase):
 
             self.assertIn("Primary Jira key: RPVINF-128", result.stdout)
             self.assertIn("Packet type: contract", result.stdout)
-            self.assertIn("reviewed and corrected implementation brief", result.stdout)
+            self.assertIn("reviewer-accepted implementation brief", result.stdout)
 
     def test_build_opencode_prompt_help_uses_shared_command_description(self) -> None:
         result = self.run_script(BUILD_PROMPT_SCRIPT, "--help")

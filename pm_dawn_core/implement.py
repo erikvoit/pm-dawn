@@ -11,6 +11,10 @@ from .layout import (
     implementation_plan_artifact_path,
     legacy_opencode_plan_artifact_path,
     packet_markdown_path,
+    packet_plan_proposal_artifact_path,
+    packet_plan_response_artifact_path,
+    packet_plan_review_artifact_path,
+    packet_plan_review_state_path,
     slice_markdown_path,
 )
 from .markdown import parse_packet_markdown, parse_slice_markdown
@@ -69,8 +73,14 @@ IMPLEMENT_COMMAND_SURFACES = (
     ImplementCommandSurface(
         command_id="plan",
         script_name="generate_packet_implementation_plan.py",
-        description="Generate a reviewed packet implementation-plan artifact.",
+        description="Generate a worker-authored packet plan proposal artifact.",
         compatibility_aliases=("generate_packet_implementation_plan",),
+    ),
+    ImplementCommandSurface(
+        command_id="review-plan",
+        script_name="coordinate_plan_review.py",
+        description="Coordinate packet plan review, response, and acceptance state.",
+        compatibility_aliases=("coordinate_plan_review",),
     ),
     ImplementCommandSurface(
         command_id="launch",
@@ -335,6 +345,71 @@ def load_execution_input(root: Path, epic_key: str, group_id: str, packet_id: st
     return data, output_path
 
 
+def packet_plan_review_state_template(
+    root: Path,
+    epic_key: str,
+    packet_id: str,
+    *,
+    status: str,
+    proposal_path: Path | None = None,
+    review_path: Path | None = None,
+    response_path: Path | None = None,
+    implementation_plan_path: Path | None = None,
+) -> dict:
+    root = repo_root(root)
+    proposal = proposal_path or packet_plan_proposal_artifact_path(root, epic_key, packet_id)
+    review = review_path or packet_plan_review_artifact_path(root, epic_key, packet_id)
+    response = response_path or packet_plan_response_artifact_path(root, epic_key, packet_id)
+    implementation = implementation_plan_path or implementation_plan_artifact_path(root, epic_key, packet_id)
+    return {
+        "schema_version": "v1",
+        "epic_key": epic_key,
+        "packet_id": packet_id,
+        "status": status,
+        "current_artifact": str(proposal.resolve()) if proposal.exists() or status == "proposal_submitted" else None,
+        "proposal_artifact": str(proposal.resolve()),
+        "review_artifact": str(review.resolve()) if review.exists() else None,
+        "response_artifact": str(response.resolve()) if response.exists() else None,
+        "implementation_plan_artifact": str(implementation.resolve()) if implementation.exists() else None,
+    }
+
+
+def resolve_packet_plan_review_state(root: Path, epic_key: str, packet_id: str) -> dict | None:
+    path = packet_plan_review_state_path(root, epic_key, packet_id)
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def packet_plan_requires_acceptance(root: Path, epic_key: str, packet_id: str) -> bool:
+    root = repo_root(root)
+    state = resolve_packet_plan_review_state(root, epic_key, packet_id)
+    if state is not None:
+        return True
+    proposal = packet_plan_proposal_artifact_path(root, epic_key, packet_id)
+    review = packet_plan_review_artifact_path(root, epic_key, packet_id)
+    response = packet_plan_response_artifact_path(root, epic_key, packet_id)
+    return any(path.exists() for path in (proposal, review, response))
+
+
+def initialize_packet_plan_review_state(root: Path, epic_key: str, packet_id: str) -> Path:
+    root = repo_root(root)
+    proposal = packet_plan_proposal_artifact_path(root, epic_key, packet_id)
+    state_path = packet_plan_review_state_path(root, epic_key, packet_id)
+    payload = packet_plan_review_state_template(
+        root,
+        epic_key,
+        packet_id,
+        status="proposal_submitted",
+        proposal_path=proposal,
+    )
+    payload["current_artifact"] = str(proposal.resolve())
+    payload["submitted_artifact"] = str(proposal.resolve())
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return state_path
+
+
 def resolve_approved_plan_path(
     root: Path,
     epic_key: str,
@@ -344,6 +419,15 @@ def resolve_approved_plan_path(
     if approved_plan_arg:
         return Path(approved_plan_arg).resolve()
     if packet_id:
+        state = resolve_packet_plan_review_state(root, epic_key, packet_id)
+        if state is not None:
+            if state.get("status") != "accepted":
+                return None
+            accepted = state.get("implementation_plan_artifact")
+            if isinstance(accepted, str) and accepted:
+                candidate = Path(accepted)
+                if candidate.exists():
+                    return candidate
         candidate = implementation_plan_artifact_path(root, epic_key, packet_id)
         if candidate.exists():
             return candidate
@@ -412,7 +496,7 @@ At the end, provide only:
         if approved_plan_path.name.endswith(".implementation-plan.md") or approved_plan_path.name.endswith(".opencode-plan.md"):
             plan_rules = f"""
 - You previously generated an initial draft plan for this packet.
-- {relative_plan} is the reviewed and corrected implementation brief for this packet.
+- {relative_plan} is the reviewer-accepted implementation brief for this packet.
 - Treat {relative_plan} as superseding your original draft plan.
 - The handoff remains authoritative for scope, constraints, validation expectations, and Jira traceability.
 - The reviewed implementation brief is authoritative for concrete implementation approach.

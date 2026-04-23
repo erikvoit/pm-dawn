@@ -26,7 +26,13 @@ Preferred downstream input is one packet artifact from `$epic-slice-plan`:
 - compiled at launch time into:
   - `.pm-dawn/epics/<epic-key>/ops/handoffs/<packet-id>.json`
 - optional reviewed implementation brief:
-  - `.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.implementation-plan.md`
+  - negotiation artifacts:
+    - `.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-proposal.md`
+    - `.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-review.md`
+    - `.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-response.md`
+    - `.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.plan-review.json`
+  - reviewer-accepted implementation brief:
+    - `.pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.implementation-plan.md`
 
 Use it only for slice or packet execution and session control. Do not use it for Jira review, Jira normalization, or generic coding work without a `.pm-dawn` handoff or packet artifact.
 
@@ -59,7 +65,7 @@ Use it only for slice or packet execution and session control. Do not use it for
 4. Build the phase-specific execution prompt.
 5. Launch the slice session:
    - `planning`: plan only, no edits or branch switch
-- `implementing`: fresh implementation run from the approved `.plan.md` or reviewed `.implementation-plan.md`
+- `implementing`: fresh implementation run from the approved `.plan.md` or reviewer-accepted `.implementation-plan.md`
    - when `--harness` is omitted, resolve the harness from the repo profile:
      - `agent_harness.phase.<phase>` first
      - then `agent_harness.default`
@@ -106,9 +112,9 @@ For `tmux-run`, do not fake reliable live steering. Report the limitation and pr
 
 ### Packet Plan
 1. Launch the configured harness for the packet-planning prompt for one packet.
-2. Require the packet-specific `.implementation-plan.md` artifact to be written.
+2. Require the packet-specific `.plan-proposal.md` artifact to be written.
 3. Treat the step as failed if the OpenCode run returns without creating the artifact file.
-4. Review and tighten that artifact before implementation launch.
+4. Review and tighten that artifact through the explicit plan-review loop before implementation launch.
 
 ### Cleanup
 1. Apply the `.pm-dawn` lifecycle policy from [references/pm-dawn-lifecycle.md](./references/pm-dawn-lifecycle.md).
@@ -120,10 +126,11 @@ For `tmux-run`, do not fake reliable live steering. Report the limitation and pr
 - Treat the packet Markdown as the canonical source of truth for packet-first execution.
 - Treat compiled packet JSON as generated and disposable.
 - Prefer `pi` as the default harness when the repo profile selects it, while keeping `opencode` available as a fallback harness.
-- When a reviewed `.implementation-plan.md` exists for the packet, treat it as the implementation brief:
+- When a reviewer-accepted `.implementation-plan.md` exists for the packet, treat it as the implementation brief:
   - packet Markdown remains authoritative for scope and constraints
   - reviewed implementation plan remains authoritative for concrete implementation approach
   - if they conflict, the implementation agent must stop and report the conflict
+- Do not launch packet implementation when `.plan-review.json` exists but is not `accepted`.
 - For implementation runs, the worker may mark the run metadata as `pending_review` when it believes the packet is ready for review.
 - Worker-written `pending_review` is not acceptance. Reviewer/Codex completion is still the authority for `completion_state=completed`.
 - In the common Codex-Pi flow, Pi may author a draft packet implementation plan, but Codex reviews that draft and approves the implementation brief before coding starts.
@@ -166,6 +173,15 @@ Generate a packet implementation plan and require the artifact to exist:
 ```bash
 python "$CODEX_HOME/skills/pm-dawn/epic-slice-implement/scripts/generate_packet_implementation_plan.py" \
   RPVINF-39 live_operations_2 live_operations_2__03_tests \
+  --repo-root .
+```
+
+Accept a packet plan proposal into the canonical implementation brief:
+
+```bash
+python "$CODEX_HOME/skills/pm-dawn/epic-slice-implement/scripts/coordinate_plan_review.py" \
+  RPVINF-39 live_operations_2 live_operations_2__03_tests \
+  --action accept \
   --repo-root .
 ```
 
@@ -214,7 +230,7 @@ If `--approved-plan` is omitted for packet execution, the launcher will automati
 .pm-dawn/epics/<epic-key>/ops/artifacts/<packet-id>.implementation-plan.md
 ```
 
-when that file exists.
+when that file exists and the packet review state is accepted.
 
 Check status:
 
