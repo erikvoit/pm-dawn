@@ -28,7 +28,7 @@ Packet-first execution path:
 - packet Markdown is canonical
 - compile the selected packet Markdown into `ops/handoffs/<packet-id>.json` immediately before launch
 - do not keep packet JSON as a manually maintained companion artifact
-- plan negotiation happens through:
+- plan negotiation happens through explicit artifact writes, not conversational steering:
   - `ops/artifacts/<packet-id>.plan-proposal.md`
   - `ops/artifacts/<packet-id>.plan-review.md`
   - `ops/artifacts/<packet-id>.plan-response.md`
@@ -39,6 +39,8 @@ Packet-first execution path:
   - reviewed implementation plan remains authoritative for implementation approach
   - if they conflict, the implementation run should stop and report rather than choose silently
 
+**Note for Pi**: For Pi, the revision loop is artifact-driven. A `changes_requested` turn triggers a fresh bounded revision run that reads the existing `.plan-review.md` and writes a new `.plan-response.md`. It is not equivalent to OpenCode server-mode in-session follow-up steering.
+
 Fallback runtime is `tmux-run`:
 - run `opencode run` directly inside a dedicated tmux session
 - use this only when explicitly requested or when server mode is unavailable
@@ -46,6 +48,8 @@ Fallback runtime is `tmux-run`:
 Steering expectations:
 - `server` mode supports follow-up prompts against the same session
 - `tmux-run` is not treated as reliably steerable; prefer relaunch or server-backed continuation
+- for OpenCode `server` mode: follow-up prompts against the same session are supported
+- for Pi: revision is artifact-driven (relaunch with new `.plan-response.md` input), not conversational steering
 
 Completion/result flow:
 - do not infer completion from tmux alone

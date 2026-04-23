@@ -36,6 +36,7 @@ from common import (
 )
 from pm_dawn_core.implement import (
     build_launch_prompt,
+    harness_monitoring_settings,
     load_execution_input,
     packet_plan_monitor_state,
     packet_plan_requires_acceptance,
@@ -91,6 +92,8 @@ def record_run(args: argparse.Namespace, handoff: dict, handoff_path: Path, payl
     ]
     if payload.get("model_check") is not None:
         cmd += ["--model-check", json.dumps(payload["model_check"], sort_keys=True)]
+    if payload.get("monitoring") is not None:
+        cmd += ["--monitoring", json.dumps(payload["monitoring"], sort_keys=True)]
     if payload.get("server_url"):
         cmd += ["--server-url", payload["server_url"]]
     if payload.get("opencode_session_id"):
@@ -182,6 +185,7 @@ def main() -> None:
     }
     if approved_plan:
         payload["approved_plan"] = str(approved_plan)
+    payload["monitoring"] = harness_monitoring_settings(root, harness)
 
     if harness == "opencode" and args.runtime == "server":
         require_cli("opencode")
@@ -242,7 +246,10 @@ def main() -> None:
         )
         run_cmd(["tmux", "new-session", "-d", "-s", worker_session, cmd])
         payload["tmux_session"] = worker_session
-        session = poll_for_session(title, timeout_seconds=20)
+        session = poll_for_session(
+            title,
+            timeout_seconds=max(20, int(payload["monitoring"]["initial_session_check_seconds"])),
+        )
         if session:
             payload["opencode_session_id"] = session.get("id")
         payload["attach_instructions"] = attach_instructions(payload["server_url"], payload["opencode_session_id"], worker_session, root)

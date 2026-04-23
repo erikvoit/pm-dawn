@@ -222,6 +222,15 @@ def render_implement_command(
 
 DEFAULT_PROJECT_PROFILE: dict = make_default_profile(
     {
+        "monitoring": {
+            "defaults": {
+                "initial_session_check_seconds": 5,
+                "planning_artifact_grace_period_seconds": 60,
+                "implementation_artifact_grace_period_seconds": 120,
+            },
+            "pi": {},
+            "opencode": {},
+        },
         "agent_harness": {
             "default": "opencode",
         },
@@ -242,6 +251,55 @@ def load_project_profile(root: Path) -> dict:
 def full_suite_command(root: Path) -> str:
     profile = load_project_profile(root)
     return str(profile.get("validation", {}).get("full_suite_command", "make check"))
+
+
+def harness_monitoring_settings(root: Path, harness: str) -> dict[str, int]:
+    profile = load_project_profile(root)
+    monitoring = profile.get("monitoring", {})
+    base_defaults = DEFAULT_PROJECT_PROFILE["monitoring"]["defaults"]
+    defaults = monitoring.get("defaults", base_defaults)
+    harness_overrides = monitoring.get(harness, {})
+    legacy_overrides = {}
+    if harness == "pi":
+        legacy_overrides = profile.get("pi", {}).get("monitoring", {})
+    elif harness == "opencode":
+        legacy_overrides = profile.get("opencode", {}).get("monitoring", {})
+
+    def resolve(name: str) -> int:
+        value = harness_overrides.get(name, legacy_overrides.get(name, defaults[name]))
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return int(base_defaults[name])
+        return parsed if parsed > 0 else int(base_defaults[name])
+
+    return {
+        "initial_session_check_seconds": resolve("initial_session_check_seconds"),
+        "planning_artifact_grace_period_seconds": resolve("planning_artifact_grace_period_seconds"),
+        "implementation_artifact_grace_period_seconds": resolve(
+            "implementation_artifact_grace_period_seconds"
+        ),
+    }
+
+
+def pi_monitoring_settings(root: Path) -> dict[str, int]:
+    return harness_monitoring_settings(root, "pi")
+
+
+def opencode_monitoring_settings(root: Path) -> dict[str, int]:
+    return harness_monitoring_settings(root, "opencode")
+
+
+def pi_initial_session_check_seconds(root: Path) -> int:
+    return pi_monitoring_settings(root)["initial_session_check_seconds"]
+
+
+def pi_planning_artifact_grace_period_seconds(root: Path) -> int:
+    return pi_monitoring_settings(root)["planning_artifact_grace_period_seconds"]
+
+
+def pi_implementation_artifact_grace_period_seconds(root: Path) -> int:
+    return pi_monitoring_settings(root)["implementation_artifact_grace_period_seconds"]
 
 
 def packet_type_from_id(packet_id: str | None) -> str | None:

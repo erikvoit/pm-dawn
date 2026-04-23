@@ -104,6 +104,8 @@ Relevant runtime overrides:
 3. Send it to the existing session when the harness is `opencode` and runtime mode is `server`.
 4. Update run metadata.
 
+**Note for Pi**: Pi does not support in-session follow-up prompts. A `changes_requested` turn in Pi triggers a fresh bounded revision run that reads the existing `.plan-review.md` and writes a new `.plan-response.md`. Revision is artifact/state monitoring, not a durable server attach/steer surface.
+
 ### Sync
 1. Read the run metadata and, when supported by the harness, the live session transcript.
 2. Update `phase`, `completion_state`, and `status` based on the latest assistant turn.
@@ -124,6 +126,8 @@ For `tmux-run`, do not fake reliable live steering. Report the limitation and pr
 2. Require the packet-specific `.plan-proposal.md` artifact to be written.
 3. Treat the step as failed if the OpenCode run returns without creating the artifact file.
 4. Review and tighten that artifact through the explicit plan-review loop before implementation launch.
+
+**Note for Pi**: For Pi, the plan proposal/response loop is artifact-driven. Pi reads `.plan-review.md` and writes `.plan-response.md` rather than using conversational steering. The revision loop is bounded and restarts from the existing state, not an in-session follow-up.
 
 ### Cleanup
 1. Apply the `.pm-dawn` lifecycle policy from [references/pm-dawn-lifecycle.md](./references/pm-dawn-lifecycle.md).
@@ -148,7 +152,7 @@ For `tmux-run`, do not fake reliable live steering. Report the limitation and pr
 - Do not launch packet implementation when `.plan-review.json` exists but is not `accepted`.
 - For implementation runs, the worker may mark the run metadata as `pending_review` when it believes the packet is ready for review.
 - Worker-written `pending_review` is not acceptance. Reviewer/Codex completion is still the authority for `completion_state=completed`.
-- In the common Codex-Pi flow, Pi may author a draft packet implementation plan, but Codex reviews that draft and approves the implementation brief before coding starts.
+- In the common Codex-Pi flow: Pi authors draft packet implementation plans as `.plan-proposal.md` and `.plan-response.md` artifacts; Codex or another reviewer reviews those drafts and explicitly accepts the `.implementation-plan.md` before coding starts. The reviewer acceptance materializes the canonical implementation brief.
 - Whole-slice slice Markdown remains the non-packet fallback.
 - Always instruct the implementation agent to read `AGENTS.md` and `CONTRIBUTING.md` before coding.
 - Never widen scope beyond the handoff.

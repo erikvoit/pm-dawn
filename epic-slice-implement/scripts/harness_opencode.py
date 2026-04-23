@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from common import emit_json, write_text
+from pm_dawn_core.implement import harness_monitoring_settings
 from pm_dawn_core.runtime import require_cli, run_cmd
 
 
@@ -36,6 +38,8 @@ def run_packet_planning(
     require_cli("opencode")
     if output_path.exists():
         output_path.unlink()
+    monitoring = harness_monitoring_settings(root, "opencode")
+    started_at = time.time()
     proc = run_cmd(
         [
             "opencode",
@@ -67,11 +71,29 @@ def run_packet_planning(
                 "returncode": proc.returncode,
                 "stdout": stdout,
                 "stderr": stderr,
+                "monitoring": monitoring,
             }
         )
         raise SystemExit(proc.returncode)
 
     if not output_path.exists():
+        artifact_grace_deadline = started_at + monitoring["planning_artifact_grace_period_seconds"]
+        while time.time() < artifact_grace_deadline:
+            if output_path.exists():
+                emit_json(
+                    {
+                        "status": "completed",
+                        "harness": "opencode",
+                        "model": model,
+                        "model_check": model_check,
+                        "packet_path": str(packet_path),
+                        "output_path": str(output_path),
+                        "title": title,
+                        "monitoring": monitoring,
+                    }
+                )
+                return
+            time.sleep(2)
         salvaged = salvage_plan_from_stdout(stdout, epic_key, packet_id)
         if salvaged is not None:
             write_text(output_path, salvaged)
@@ -84,6 +106,7 @@ def run_packet_planning(
                     "packet_path": str(packet_path),
                     "output_path": str(output_path),
                     "title": title,
+                    "monitoring": monitoring,
                     "recovered_from_stdout": True,
                 }
             )
@@ -100,6 +123,7 @@ def run_packet_planning(
                 "returncode": proc.returncode,
                 "stdout": stdout,
                 "stderr": stderr,
+                "monitoring": monitoring,
             }
         )
         raise SystemExit(2)
@@ -113,5 +137,6 @@ def run_packet_planning(
             "packet_path": str(packet_path),
             "output_path": str(output_path),
             "title": title,
+            "monitoring": monitoring,
         }
     )

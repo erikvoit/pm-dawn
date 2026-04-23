@@ -21,10 +21,15 @@ from pm_dawn_core.implement import (
     build_launch_prompt,
     build_steer_prompt,
     compile_packet_handoff,
+    harness_monitoring_settings,
     implement_command_relative_script_path,
     initialize_packet_plan_review_state,
     load_execution_input,
+    opencode_monitoring_settings,
     packet_plan_requires_acceptance,
+    pi_implementation_artifact_grace_period_seconds,
+    pi_initial_session_check_seconds,
+    pi_planning_artifact_grace_period_seconds,
     render_implement_command,
     resolve_agent_harness,
     resolve_harness_model,
@@ -391,6 +396,108 @@ class TestImplementHelpers(unittest.TestCase):
 
             self.assertEqual("pi", harness)
             self.assertEqual("planner-model", model)
+
+    def test_harness_monitoring_settings_use_project_profile_and_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            write_file(
+                root / ".pm-dawn" / "project-profile.toml",
+                textwrap.dedent(
+                    """\
+                    [monitoring.defaults]
+                    initial_session_check_seconds = 6
+                    planning_artifact_grace_period_seconds = 70
+                    implementation_artifact_grace_period_seconds = 140
+
+                    [monitoring.pi]
+                    initial_session_check_seconds = 7
+                    planning_artifact_grace_period_seconds = 75
+                    implementation_artifact_grace_period_seconds = 150
+
+                    [monitoring.opencode]
+                    planning_artifact_grace_period_seconds = 90
+                    """
+                ),
+            )
+
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 7,
+                    "planning_artifact_grace_period_seconds": 75,
+                    "implementation_artifact_grace_period_seconds": 150,
+                },
+                harness_monitoring_settings(root, "pi"),
+            )
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 6,
+                    "planning_artifact_grace_period_seconds": 90,
+                    "implementation_artifact_grace_period_seconds": 140,
+                },
+                harness_monitoring_settings(root, "opencode"),
+            )
+            self.assertEqual(7, pi_initial_session_check_seconds(root))
+            self.assertEqual(75, pi_planning_artifact_grace_period_seconds(root))
+            self.assertEqual(150, pi_implementation_artifact_grace_period_seconds(root))
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 6,
+                    "planning_artifact_grace_period_seconds": 90,
+                    "implementation_artifact_grace_period_seconds": 140,
+                },
+                opencode_monitoring_settings(root),
+            )
+
+    def test_harness_monitoring_settings_fall_back_on_invalid_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            write_file(
+                root / ".pm-dawn" / "project-profile.toml",
+                textwrap.dedent(
+                    """\
+                    [monitoring.defaults]
+                    initial_session_check_seconds = -1
+                    planning_artifact_grace_period_seconds = "oops"
+                    implementation_artifact_grace_period_seconds = 0
+                    """
+                ),
+            )
+
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 5,
+                    "planning_artifact_grace_period_seconds": 60,
+                    "implementation_artifact_grace_period_seconds": 120,
+                },
+                harness_monitoring_settings(root, "pi"),
+            )
+
+    def test_harness_monitoring_settings_support_legacy_pi_monitoring_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            write_file(
+                root / ".pm-dawn" / "project-profile.toml",
+                textwrap.dedent(
+                    """\
+                    [pi.monitoring]
+                    initial_session_check_seconds = 9
+                    planning_artifact_grace_period_seconds = 99
+                    implementation_artifact_grace_period_seconds = 199
+                    """
+                ),
+            )
+
+            self.assertEqual(
+                {
+                    "initial_session_check_seconds": 9,
+                    "planning_artifact_grace_period_seconds": 99,
+                    "implementation_artifact_grace_period_seconds": 199,
+                },
+                harness_monitoring_settings(root, "pi"),
+            )
 
     def test_resolve_approved_plan_path_prefers_reviewed_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
