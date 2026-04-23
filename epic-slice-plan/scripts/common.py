@@ -10,12 +10,10 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pm_dawn_core.layout import SlicePaths, packet_markdown_path, slice_paths
+from pm_dawn_core.layout import SlicePaths, slice_paths
 from pm_dawn_core.markdown import (
     bullet_values,
     parse_markdown_sections,
-    parse_packet_markdown,
-    parse_plan_markdown,
     single_bullet,
 )
 from pm_dawn_core.profile import (

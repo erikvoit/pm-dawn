@@ -31,7 +31,6 @@ from pm_dawn_core.implement import (
 from pm_dawn_core.layout import (
     implementation_plan_artifact_path,
     packet_plan_proposal_artifact_path,
-    packet_plan_response_artifact_path,
     packet_plan_review_state_path,
 )
 from pm_dawn_core import runtime

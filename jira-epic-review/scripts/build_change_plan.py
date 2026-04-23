@@ -11,7 +11,6 @@ from common import (
     REQUIRED_STORY_SECTIONS,
     categorize_summary,
     emit_json_and_write_tmp,
-    graph_epic_key,
     issue_description,
     load_project_profile,
     repo_root,
