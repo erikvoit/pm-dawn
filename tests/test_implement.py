@@ -14,6 +14,10 @@ from unittest import mock
 
 from pm_dawn_core.implement import (
     IMPLEMENT_COMMAND_SURFACES,
+    packet_plan_expected_artifact_path,
+    packet_plan_monitor_state,
+    packet_plan_requires_revision_run,
+    packet_plan_review_state_snapshot,
     build_launch_prompt,
     build_steer_prompt,
     compile_packet_handoff,
@@ -505,6 +509,103 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertIsNotNone(state)
             assert state is not None
             self.assertEqual("proposal_submitted", state["status"])
+
+    def test_packet_plan_monitor_state_reports_revision_response_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            state_path = packet_plan_review_state_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            state_path.write_text(
+                json.dumps({"status": "changes_requested"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            monitor = packet_plan_monitor_state(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+
+            self.assertEqual("changes_requested", monitor["status"])
+            self.assertTrue(monitor["waitable"])
+            self.assertTrue(monitor["requires_revision_run"])
+            self.assertTrue(
+                str(monitor["expected_artifact"]).endswith(
+                    "consumer_enablement_4__01_contract.plan-response.md"
+                )
+            )
+
+    def test_packet_plan_review_state_snapshot_marks_accepted_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            accepted = implementation_plan_artifact_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            accepted.write_text("# accepted\n", encoding="utf-8")
+            state_path = packet_plan_review_state_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "status": "accepted",
+                        "implementation_plan_artifact": str(accepted.resolve()),
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            snapshot = packet_plan_review_state_snapshot(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+
+            self.assertTrue(snapshot.accepted)
+            self.assertFalse(snapshot.requires_revision_run)
+            self.assertEqual(accepted.resolve(), snapshot.expected_artifact.resolve())
+
+    def test_packet_plan_requires_revision_run_true_for_changes_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            state_path = packet_plan_review_state_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            state_path.write_text(
+                json.dumps({"status": "changes_requested"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertTrue(
+                packet_plan_requires_revision_run(
+                    root,
+                    "RPVINF-124",
+                    "consumer_enablement_4__01_contract",
+                )
+            )
+            expected = packet_plan_expected_artifact_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            assert expected is not None
+            self.assertTrue(
+                expected.name.endswith("consumer_enablement_4__01_contract.plan-response.md")
+            )
 
     def test_build_launch_prompt_includes_reviewed_plan_rules(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

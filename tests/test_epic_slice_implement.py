@@ -364,6 +364,82 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertEqual(1, result.returncode)
             self.assertIn("plan review artifact not found", result.stderr)
 
+    def test_generate_packet_implementation_plan_blocks_when_review_is_already_accepted(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_slice_fixture(root)
+            state_path = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "artifacts"
+                / "consumer_enablement_3__01_contract.plan-review.json"
+            )
+            state_path.write_text(
+                json.dumps({"status": "accepted"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATE_PACKET_IMPLEMENTATION_PLAN),
+                    "RPVINF-124",
+                    "consumer_enablement_3",
+                    "consumer_enablement_3__01_contract",
+                    "--repo-root",
+                    str(root),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("already accepted", result.stderr)
+
+    def test_generate_packet_implementation_plan_blocks_when_response_already_submitted(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_slice_fixture(root)
+            state_path = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "artifacts"
+                / "consumer_enablement_3__01_contract.plan-review.json"
+            )
+            state_path.write_text(
+                json.dumps({"status": "response_submitted"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATE_PACKET_IMPLEMENTATION_PLAN),
+                    "RPVINF-124",
+                    "consumer_enablement_3",
+                    "consumer_enablement_3__01_contract",
+                    "--repo-root",
+                    str(root),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("response is already submitted", result.stderr)
+
     def test_slice_status_includes_plan_review_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -417,6 +493,13 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
 
             payload = json.loads(result.stdout)
             self.assertEqual("changes_requested", payload["plan_review"]["status"])
+            self.assertEqual("changes_requested", payload["plan_monitor"]["status"])
+            self.assertTrue(payload["plan_monitor"]["requires_revision_run"])
+            self.assertTrue(
+                payload["plan_monitor"]["expected_artifact"].endswith(
+                    "consumer_enablement_3__02_wiring.plan-response.md"
+                )
+            )
 
     def test_migrate_pm_dawn_layout_dry_run_reports_canonical_follow_up_commands(
         self,

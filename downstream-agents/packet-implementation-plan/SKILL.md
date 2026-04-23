@@ -14,7 +14,7 @@ It must:
 - read the approved packet Markdown
 - inspect the relevant repo surfaces
 - produce a concrete implementation plan grounded in repo evidence
-- write that plan to `.pm-dawn/epics/<epic>/ops/artifacts/<packet-id>.implementation-plan.md`
+- write that plan to the packet-plan artifact path required by the current PM Dawn review state
 
 It must not:
 - edit code
@@ -36,6 +36,13 @@ Resolve the canonical packet path as:
 - `.pm-dawn/epics/<epic_key>/packets/<packet_id>.md`
 
 Resolve the output path as:
+- initial proposal:
+  - `.pm-dawn/epics/<epic_key>/ops/artifacts/<packet_id>.plan-proposal.md`
+- revision response when review state is `changes_requested`:
+  - `.pm-dawn/epics/<epic_key>/ops/artifacts/<packet_id>.plan-response.md`
+
+Do not write the canonical reviewer-approved implementation brief directly.
+That file is materialized only after explicit acceptance into:
 - `.pm-dawn/epics/<epic_key>/ops/artifacts/<packet_id>.implementation-plan.md`
 
 When you need to refer to the PM Dawn planning entrypoint from instructions or follow-up notes, use the canonical command surface:
@@ -72,10 +79,15 @@ When you need to refer to the PM Dawn planning entrypoint from instructions or f
 This skill produces a worker-authored draft plan.
 
 That means:
-- the generated `.implementation-plan.md` is review input
+- the generated `.plan-proposal.md` or `.plan-response.md` artifact is review input
 - Codex or another reviewer may tighten, correct, or reject it before implementation starts
-- the reviewed implementation brief, not the worker's first draft, becomes the authoritative implementation approach
+- the reviewed `.implementation-plan.md`, not the worker's draft artifact, becomes the authoritative implementation approach
 - this skill should never imply that writing the file is equivalent to plan approval
+
+When the current review state is `changes_requested`:
+- read the current `.plan-review.md`
+- produce a revised `.plan-response.md`
+- treat the revision as a response to reviewer feedback, not as a replacement self-approval flow
 
 ---
 
@@ -213,8 +225,8 @@ Risks or Blockers:
 ## Output Location
 
 Always write the plan to:
-
-.pm-dawn/epics/<epic_key>/ops/artifacts/<packet_id>.implementation-plan.md
+- `.pm-dawn/epics/<epic_key>/ops/artifacts/<packet_id>.plan-proposal.md` for the first draft
+- `.pm-dawn/epics/<epic_key>/ops/artifacts/<packet_id>.plan-response.md` when responding to `changes_requested`
 
 Requirements:
 - Overwrite any existing file for the same packet
@@ -251,3 +263,4 @@ The skill is successful when:
 - All planned changes are grounded in repo inspection
 - No code or tracked files were modified
 - The result is not only printed—it exists on disk
+- The result is a worker-authored proposal or response artifact, not a self-materialized `.implementation-plan.md`
