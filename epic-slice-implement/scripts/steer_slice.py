@@ -16,11 +16,10 @@ from common import (
     emit_json,
     parse_slice_markdown,
     read_json,
-    require_cli,
-    run_cmd,
 )
 from pm_dawn_core.layout import run_metadata_path
 from pm_dawn_core.profile import repo_root
+from pm_dawn_core.runtime import require_cli, run_cmd
 
 
 def parse_args() -> argparse.Namespace:

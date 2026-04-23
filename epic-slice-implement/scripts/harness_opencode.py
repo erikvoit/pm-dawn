@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from common import emit_json, require_cli, run_cmd, write_text
+from common import emit_json, write_text
+from pm_dawn_core.runtime import require_cli, run_cmd
 
 
 def salvage_plan_from_stdout(stdout: str, epic_key: str, packet_id: str) -> str | None:

@@ -1,8 +1,11 @@
-.PHONY: check test compile
+.PHONY: check test compile lint
 
 PYTHON ?= python
 
-check: compile test
+check: lint compile test
+
+lint:
+	ruff check .
 
 test:
 	$(PYTHON) -m unittest discover tests

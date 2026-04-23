@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -17,14 +16,11 @@ from pm_dawn_core.profile import (
     make_default_profile,
     repo_root,
 )
+from pm_dawn_core.runtime import require_cli, run_cmd
 
 def run_acli(args: list[str]) -> str:
-    proc = subprocess.run(
-        ["acli", *args],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    require_cli("acli")
+    proc = run_cmd(["acli", *args], check=False)
     if proc.returncode != 0:
         message = proc.stderr.strip() or proc.stdout.strip() or "unknown ACLI error"
         raise RuntimeError(message)

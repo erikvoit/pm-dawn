@@ -1,0 +1,14 @@
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E402", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"epic-slice-implement/scripts/*.py" = ["E402", "F401"]
+"epic-slice-plan/scripts/*.py" = ["E402"]
+"epic-slice-plan/scripts/common.py" = ["E402", "F401"]
+"jira-epic-review/scripts/*.py" = ["E402"]
+"jira-epic-review/scripts/common.py" = ["E402", "F401"]
+"jira-pr/scripts/*.py" = ["E402", "F401"]
+"tests/test_epic_slice_plan.py" = ["E402"]

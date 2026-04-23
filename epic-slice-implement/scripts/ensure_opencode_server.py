@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import time
+import shlex
 
-from common import emit_json, opencode_server_session_name, repo_root, require_cli, run_cmd, tmux_has_session
+from common import emit_json, opencode_server_session_name, repo_root
+from pm_dawn_core.runtime import require_cli, run_cmd, tmux_has_session
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,7 +26,11 @@ def main() -> None:
 
     started = False
     if not tmux_has_session(session_name):
-        cmd = f"cd {root} && opencode serve --hostname {args.hostname} --port {args.port}"
+        cmd = (
+            f"cd {shlex.quote(str(root))} && "
+            f"opencode serve --hostname {shlex.quote(args.hostname)} "
+            f"--port {shlex.quote(str(args.port))}"
+        )
         run_cmd(["tmux", "new-session", "-d", "-s", session_name, cmd])
         started = True
         time.sleep(1)

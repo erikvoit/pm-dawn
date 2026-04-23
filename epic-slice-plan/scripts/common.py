@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -11,12 +10,10 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pm_dawn_core.layout import SlicePaths, packet_markdown_path, slice_paths
+from pm_dawn_core.layout import SlicePaths, slice_paths
 from pm_dawn_core.markdown import (
     bullet_values,
     parse_markdown_sections,
-    parse_packet_markdown,
-    parse_plan_markdown,
     single_bullet,
 )
 from pm_dawn_core.profile import (
@@ -25,6 +22,7 @@ from pm_dawn_core.profile import (
     make_default_profile,
     repo_root,
 )
+from pm_dawn_core.runtime import run_cmd
 
 REQUIRED_HANDOFF_FIELDS = [
     "schema_version",
@@ -219,13 +217,6 @@ def read_optional_text(path: Path) -> str | None:
     if not path.exists():
         return None
     return path.read_text(encoding="utf-8")
-
-
-def run_cmd(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
-    proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
-    if check and proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"command failed: {' '.join(cmd)}")
-    return proc
 
 
 def tracked_files(root: Path, prefix: str) -> list[str]:

@@ -53,6 +53,15 @@ Install PM Dawn into your skills directory, make the downstream agent available 
 - `acli`
 - one implementation harness: `pi` or `opencode`
 
+Environment and config discovery is shared across PM Dawn surfaces. The current runtime contract supports these overrides:
+
+- `PM_DAWN_HOME`
+- `PM_DAWN_SHELL`
+- `PM_DAWN_PROVIDER_TIMEOUT_SECONDS`
+- `PM_DAWN_OPENCODE_CONFIG_PATH`
+- `PM_DAWN_PI_MODELS_CONFIG_PATH`
+- `XDG_CONFIG_HOME` for OpenCode config discovery
+
 ### Install Into Codex Skills
 
 ```bash
@@ -266,6 +275,7 @@ Assumptions:
 - PM Dawn runs from an installed skill directory such as `$CODEX_HOME/skills/pm-dawn/`.
 - Core workflow scripts are runnable with plain `python`.
 - External CLIs such as `tmux`, `pi`, `opencode`, `gh`, and `acli` are explicit workflow dependencies, not hidden Python package assumptions.
+- Environment/config lookup and CLI prerequisite behavior come from the shared runtime contract in `pm_dawn_core/runtime.py`.
 
 ### Outputs
 
@@ -321,6 +331,15 @@ Expected environment:
 - `.pm-dawn/project-profile.toml` when repo-local defaults matter
 - harness CLI installed for the chosen runtime (`pi` or `opencode`)
 
+Shared runtime behavior:
+
+- PM Dawn resolves shell execution through `PM_DAWN_SHELL`, then `SHELL`, then `zsh`, `bash`, and `sh`
+- OpenCode config is discovered from `PM_DAWN_OPENCODE_CONFIG_PATH`, then `XDG_CONFIG_HOME`, then `~/.config/opencode/opencode.json`
+- Pi model config is discovered from `PM_DAWN_PI_MODELS_CONFIG_PATH`, then `~/.pi/agent/models.json`
+- `PM_DAWN_HOME` can override the home-directory base for PM Dawn-owned lookups
+- `PM_DAWN_PROVIDER_TIMEOUT_SECONDS` controls the provider model sanity-check timeout
+- missing workflow CLIs fail as explicit PM Dawn prerequisite errors rather than as hidden process errors
+
 Idempotency and overwrite behavior:
 
 - generated plan and packet artifacts overwrite prior versions when regenerated
@@ -336,6 +355,7 @@ Important side effects:
 - launch flows may create tmux sessions and harness runtime state
 - implementation workers may mark `worker.status=pending_review`
 - `pending_review` is not acceptance; reviewer completion remains separate
+- PM Dawn does not require a managed Python runner wrapper today; plain `python` is still the supported execution path for core workflow scripts
 
 ---
 

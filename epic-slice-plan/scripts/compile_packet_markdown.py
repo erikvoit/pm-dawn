@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from common import emit_json, repo_root, slice_paths, write_json
+from common import emit_json, repo_root, write_json
 from pm_dawn_core.implement import compile_packet_handoff
 
 
@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo-root", default=".")
     parser.add_argument("--output")
     return parser.parse_args()
+
 
 def main() -> None:
     args = parse_args()

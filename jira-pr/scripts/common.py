@@ -18,6 +18,7 @@ from pm_dawn_core.profile import (
     make_default_profile,
     repo_root,
 )
+from pm_dawn_core.runtime import run_cmd
 
 REQUIRED_HANDOFF_FIELDS = [
     "schema_version",
@@ -69,13 +70,6 @@ def issue_key_re(profile: dict) -> re.Pattern[str]:
 
 def full_suite_command(profile: dict) -> str:
     return str(profile.get("validation", {}).get("full_suite_command", "make check"))
-
-
-def run_cmd(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
-    proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
-    if check and proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"command failed: {' '.join(cmd)}")
-    return proc
 
 
 def read_json(path: Path) -> dict:

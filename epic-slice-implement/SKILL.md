@@ -41,6 +41,7 @@ Use it only for slice or packet execution and session control. Do not use it for
 - the selected slice Markdown already exists under `.pm-dawn/epics/<epic-key>/slices/`
 - the repo has `AGENTS.md` and `CONTRIBUTING.md`
 - the repo should provide `.pm-dawn/project-profile.toml` so validation and branch conventions stay project-local
+- the shared runtime contract in `pm_dawn_core/runtime.py` is the authority for shell resolution, env/config overrides, and workflow CLI prerequisite checks
 
 ## Inputs
 - `epic_key`
@@ -55,6 +56,14 @@ Use it only for slice or packet execution and session control. Do not use it for
 - optional `harness`; when omitted, resolve from `.pm-dawn/project-profile.toml`
 - optional `model`; when omitted, resolve from the selected harness section in `.pm-dawn/project-profile.toml`
 
+Relevant runtime overrides:
+- `PM_DAWN_HOME`
+- `PM_DAWN_SHELL`
+- `PM_DAWN_PROVIDER_TIMEOUT_SECONDS`
+- `PM_DAWN_OPENCODE_CONFIG_PATH`
+- `PM_DAWN_PI_MODELS_CONFIG_PATH`
+- `XDG_CONFIG_HOME`
+
 ## Workflows
 ### Launch
 1. Load and validate the preferred packet Markdown, compile it to generated execution JSON only at launch time, or fall back to the whole-slice slice Markdown.
@@ -65,7 +74,7 @@ Use it only for slice or packet execution and session control. Do not use it for
 4. Build the phase-specific execution prompt.
 5. Launch the slice session:
    - `planning`: plan only, no edits or branch switch
-- `implementing`: fresh implementation run from the approved `.plan.md` or reviewer-accepted `.implementation-plan.md`
+   - `implementing`: fresh implementation run from the approved `.plan.md` or reviewer-accepted `.implementation-plan.md`
    - when `--harness` is omitted, resolve the harness from the repo profile:
      - `agent_harness.phase.<phase>` first
      - then `agent_harness.default`
@@ -80,7 +89,7 @@ Use it only for slice or packet execution and session control. Do not use it for
 8. When the worker believes an implementation run is done, it may mark:
    - `worker.status: pending_review`
    This is only a worker claim that the packet is ready for review; it does not mean the packet is accepted or completed.
-7. Return attach and status instructions.
+9. Return attach and status instructions.
 
 ### Status
 1. Read the run metadata.
@@ -126,6 +135,12 @@ For `tmux-run`, do not fake reliable live steering. Report the limitation and pr
 - Treat the packet Markdown as the canonical source of truth for packet-first execution.
 - Treat compiled packet JSON as generated and disposable.
 - Prefer `pi` as the default harness when the repo profile selects it, while keeping `opencode` available as a fallback harness.
+- Treat `python`, `tmux`, `pi`, and `opencode` as explicit workflow CLIs rather than hidden dependencies.
+- Use the shared runtime contract for shell resolution and config discovery:
+  - `PM_DAWN_SHELL` then `SHELL` then `zsh`/`bash`/`sh`
+  - `PM_DAWN_OPENCODE_CONFIG_PATH` or `XDG_CONFIG_HOME` for OpenCode config
+  - `PM_DAWN_PI_MODELS_CONFIG_PATH` for Pi model config
+  - `PM_DAWN_PROVIDER_TIMEOUT_SECONDS` for provider sanity-check timeouts
 - When a reviewer-accepted `.implementation-plan.md` exists for the packet, treat it as the implementation brief:
   - packet Markdown remains authoritative for scope and constraints
   - reviewed implementation plan remains authoritative for concrete implementation approach
@@ -141,6 +156,7 @@ For `tmux-run`, do not fake reliable live steering. Report the limitation and pr
 - Prefer repo-documented `make` or other project-native validation when applicable.
 - Do not delete active slice artifacts.
 - After merge, only archive or delete the slice-specific files; keep the epic index files unless the entire epic workspace is being retired.
+- Do not describe a managed PM Dawn Python runner as if it already exists; the current contract is plain `python` plus explicit workflow CLI prerequisites.
 
 ## Commands
 Load an execution input:

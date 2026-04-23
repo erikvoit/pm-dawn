@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from pm_dawn_core.implement import (
     IMPLEMENT_COMMAND_SURFACES,
@@ -29,14 +31,40 @@ from pm_dawn_core.implement import (
 from pm_dawn_core.layout import (
     implementation_plan_artifact_path,
     packet_plan_proposal_artifact_path,
-    packet_plan_response_artifact_path,
     packet_plan_review_state_path,
 )
+from pm_dawn_core import runtime
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_module(module_name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+epic_slice_plan_common = load_module(
+    "epic_slice_plan_common",
+    REPO_ROOT / "epic-slice-plan" / "scripts" / "common.py",
+)
+jira_pr_common = load_module(
+    "jira_pr_common",
+    REPO_ROOT / "jira-pr" / "scripts" / "common.py",
+)
+jira_epic_review_common = load_module(
+    "jira_epic_review_common",
+    REPO_ROOT / "jira-epic-review" / "scripts" / "common.py",
+)
+
 LOAD_HANDOFF_SCRIPT = REPO_ROOT / "epic-slice-implement" / "scripts" / "load_handoff.py"
-BUILD_PROMPT_SCRIPT = REPO_ROOT / "epic-slice-implement" / "scripts" / "build_opencode_prompt.py"
+BUILD_PROMPT_SCRIPT = (
+    REPO_ROOT / "epic-slice-implement" / "scripts" / "build_opencode_prompt.py"
+)
 
 SLICE_MARKDOWN = textwrap.dedent(
     """\
@@ -178,15 +206,31 @@ def write_file(path: Path, content: str) -> None:
 
 def build_repo_fixture(root: Path) -> None:
     write_file(
-        root / ".pm-dawn" / "epics" / "RPVINF-124" / "slices" / "consumer_enablement_4.md",
+        root
+        / ".pm-dawn"
+        / "epics"
+        / "RPVINF-124"
+        / "slices"
+        / "consumer_enablement_4.md",
         SLICE_MARKDOWN,
     )
     write_file(
-        root / ".pm-dawn" / "epics" / "RPVINF-124" / "packets" / "consumer_enablement_4__01_contract.md",
+        root
+        / ".pm-dawn"
+        / "epics"
+        / "RPVINF-124"
+        / "packets"
+        / "consumer_enablement_4__01_contract.md",
         PACKET_MARKDOWN,
     )
     write_file(
-        root / ".pm-dawn" / "epics" / "RPVINF-124" / "ops" / "artifacts" / "consumer_enablement_4__01_contract.implementation-plan.md",
+        root
+        / ".pm-dawn"
+        / "epics"
+        / "RPVINF-124"
+        / "ops"
+        / "artifacts"
+        / "consumer_enablement_4__01_contract.implementation-plan.md",
         "# reviewed plan\n",
     )
 
@@ -258,7 +302,9 @@ class TestImplementHelpers(unittest.TestCase):
             root = Path(tmpdir).resolve()
             build_repo_fixture(root)
 
-            handoff, path = load_execution_input(root, "RPVINF-124", "consumer_enablement_4")
+            handoff, path = load_execution_input(
+                root, "RPVINF-124", "consumer_enablement_4"
+            )
 
             self.assertEqual("consumer_enablement_4", handoff["group_id"])
             self.assertEqual("RPVINF-128", handoff["primary_issue"])
@@ -279,7 +325,9 @@ class TestImplementHelpers(unittest.TestCase):
 
             self.assertEqual("consumer_enablement_4__01_contract", handoff["packet_id"])
             self.assertEqual("contract", handoff["packet_type"])
-            self.assertTrue(str(path).endswith("consumer_enablement_4__01_contract.json"))
+            self.assertTrue(
+                str(path).endswith("consumer_enablement_4__01_contract.json")
+            )
 
     def test_compile_packet_handoff_builds_json_from_packet_markdown(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -378,7 +426,9 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertEqual(str(proposal.resolve()), state["proposal_artifact"])
             self.assertEqual(str(proposal.resolve()), state["current_artifact"])
 
-    def test_resolve_approved_plan_path_requires_accepted_state_when_present(self) -> None:
+    def test_resolve_approved_plan_path_requires_accepted_state_when_present(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
             build_repo_fixture(root)
@@ -388,7 +438,9 @@ class TestImplementHelpers(unittest.TestCase):
                 "consumer_enablement_4__01_contract",
             )
             proposal.write_text("# proposal\n", encoding="utf-8")
-            initialize_packet_plan_review_state(root, "RPVINF-124", "consumer_enablement_4__01_contract")
+            initialize_packet_plan_review_state(
+                root, "RPVINF-124", "consumer_enablement_4__01_contract"
+            )
 
             self.assertTrue(
                 packet_plan_requires_acceptance(
@@ -420,7 +472,9 @@ class TestImplementHelpers(unittest.TestCase):
             state = json.loads(state_path.read_text(encoding="utf-8"))
             state["status"] = "accepted"
             state["implementation_plan_artifact"] = str(accepted.resolve())
-            state_path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            state_path.write_text(
+                json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
 
             resolved = resolve_approved_plan_path(
                 root,
@@ -440,9 +494,13 @@ class TestImplementHelpers(unittest.TestCase):
                 "consumer_enablement_4__01_contract",
             )
             proposal.write_text("# proposal\n", encoding="utf-8")
-            initialize_packet_plan_review_state(root, "RPVINF-124", "consumer_enablement_4__01_contract")
+            initialize_packet_plan_review_state(
+                root, "RPVINF-124", "consumer_enablement_4__01_contract"
+            )
 
-            state = resolve_packet_plan_review_state(root, "RPVINF-124", "consumer_enablement_4__01_contract")
+            state = resolve_packet_plan_review_state(
+                root, "RPVINF-124", "consumer_enablement_4__01_contract"
+            )
 
             self.assertIsNotNone(state)
             assert state is not None
@@ -452,7 +510,9 @@ class TestImplementHelpers(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
             build_repo_fixture(root)
-            handoff, handoff_path = load_execution_input(root, "RPVINF-124", "consumer_enablement_4")
+            handoff, handoff_path = load_execution_input(
+                root, "RPVINF-124", "consumer_enablement_4"
+            )
             approved_plan = (
                 root
                 / ".pm-dawn"
@@ -473,20 +533,31 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertIn("approved plan", prompt)
             self.assertIn("reviewer-accepted implementation brief", prompt)
             self.assertIn("feature/RPVINF-128-consumer-enablement", prompt)
-            self.assertIn("python3 epic-slice-implement/scripts/mark_slice_pending_review.py", prompt)
-            self.assertIn("epic-slice-implement/scripts/mark_slice_pending_review.py", prompt)
+            self.assertIn(
+                "python3 epic-slice-implement/scripts/mark_slice_pending_review.py",
+                prompt,
+            )
+            self.assertIn(
+                "epic-slice-implement/scripts/mark_slice_pending_review.py", prompt
+            )
             self.assertIn("--repo-root .", prompt)
 
     def test_build_steer_prompt_references_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
             build_repo_fixture(root)
-            handoff, handoff_path = load_execution_input(root, "RPVINF-124", "consumer_enablement_4")
+            handoff, handoff_path = load_execution_input(
+                root, "RPVINF-124", "consumer_enablement_4"
+            )
 
-            prompt = build_steer_prompt(handoff, handoff_path, root, "Stay within packet scope.")
+            prompt = build_steer_prompt(
+                handoff, handoff_path, root, "Stay within packet scope."
+            )
 
             self.assertIn("Stay within packet scope.", prompt)
-            self.assertIn(".pm-dawn/epics/RPVINF-124/slices/consumer_enablement_4.md", prompt)
+            self.assertIn(
+                ".pm-dawn/epics/RPVINF-124/slices/consumer_enablement_4.md", prompt
+            )
 
 
 class TestImplementCliSmoke(unittest.TestCase):
@@ -513,7 +584,9 @@ class TestImplementCliSmoke(unittest.TestCase):
 
             payload = json.loads(result.stdout)
             self.assertEqual("consumer_enablement_4", payload["handoff"]["group_id"])
-            self.assertTrue(payload["handoff_path"].endswith("consumer_enablement_4.md"))
+            self.assertTrue(
+                payload["handoff_path"].endswith("consumer_enablement_4.md")
+            )
 
     def test_build_opencode_prompt_cli_uses_shared_prompt_builder(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -549,6 +622,196 @@ class TestImplementCliSmoke(unittest.TestCase):
         self.assertIn(
             "Build the exact launch or steer prompt for an implementation run.",
             result.stdout,
+        )
+
+
+class TestRuntimeHelpers(unittest.TestCase):
+    def test_runtime_home_prefers_pm_dawn_home_env(self) -> None:
+        with mock.patch.dict(
+            "os.environ", {"PM_DAWN_HOME": "/custom/pm-dawn"}, clear=False
+        ):
+            self.assertEqual(Path("/custom/pm-dawn"), runtime.runtime_home())
+
+    def test_runtime_home_uses_home_when_pm_dawn_home_missing(self) -> None:
+        env = {"HOME": "/custom/home"}
+        with mock.patch.dict("os.environ", env, clear=True):
+            self.assertEqual(Path("/custom/home"), runtime.runtime_home())
+
+    def test_runtime_home_returns_none_when_no_home_available(self) -> None:
+        with mock.patch.dict("os.environ", {}, clear=True):
+            with mock.patch(
+                "pathlib.Path.home", side_effect=RuntimeError("No home dir")
+            ):
+                self.assertIsNone(runtime.runtime_home())
+
+    def test_provider_timeout_seconds_uses_env_value(self) -> None:
+        with mock.patch.dict(
+            "os.environ", {"PM_DAWN_PROVIDER_TIMEOUT_SECONDS": "5.5"}, clear=False
+        ):
+            self.assertEqual(5.5, runtime.provider_timeout_seconds())
+
+    def test_provider_timeout_seconds_falls_back_to_default(self) -> None:
+        with mock.patch.dict(
+            "os.environ",
+            {"PM_DAWN_PROVIDER_TIMEOUT_SECONDS": "not-a-number"},
+            clear=False,
+        ):
+            self.assertEqual(2.0, runtime.provider_timeout_seconds())
+
+    def test_opencode_config_path_prefers_env_override(self) -> None:
+        with mock.patch.dict(
+            "os.environ",
+            {"PM_DAWN_OPENCODE_CONFIG_PATH": "/tmp/opencode.json"},
+            clear=False,
+        ):
+            self.assertEqual(Path("/tmp/opencode.json"), runtime.opencode_config_path())
+
+    def test_opencode_config_path_uses_xdg_config_home(self) -> None:
+        env = {"XDG_CONFIG_HOME": "/tmp/xdg-config", "HOME": "/tmp/home"}
+        with mock.patch.dict("os.environ", env, clear=True):
+            self.assertEqual(
+                Path("/tmp/xdg-config") / "opencode" / "opencode.json",
+                runtime.opencode_config_path(),
+            )
+
+    def test_opencode_config_path_uses_home_config(self) -> None:
+        env = {"HOME": "/tmp/home"}
+        with mock.patch.dict("os.environ", env, clear=True):
+            self.assertEqual(
+                Path("/tmp/home") / ".config" / "opencode" / "opencode.json",
+                runtime.opencode_config_path(),
+            )
+
+    def test_pi_models_config_path_prefers_env_override(self) -> None:
+        with mock.patch.dict(
+            "os.environ",
+            {"PM_DAWN_PI_MODELS_CONFIG_PATH": "/tmp/pi-models.json"},
+            clear=False,
+        ):
+            self.assertEqual(
+                Path("/tmp/pi-models.json"), runtime.pi_models_config_path()
+            )
+
+    def test_pi_models_config_path_uses_home(self) -> None:
+        env = {"HOME": "/tmp/home"}
+        with mock.patch.dict("os.environ", env, clear=True):
+            self.assertEqual(
+                Path("/tmp/home") / ".pi" / "agent" / "models.json",
+                runtime.pi_models_config_path(),
+            )
+
+    def test_command_available_returns_true_for_existing_command(self) -> None:
+        self.assertTrue(runtime.command_available("python"))
+
+    def test_command_available_returns_false_for_missing_command(self) -> None:
+        self.assertFalse(runtime.command_available("nonexistent-command-xyz"))
+
+    def test_require_cli_raises_for_missing_command(self) -> None:
+        with self.assertRaises(RuntimeError) as ctx:
+            runtime.require_cli("nonexistent-command-xyz")
+        self.assertIn(
+            "required CLI 'nonexistent-command-xyz' not found", str(ctx.exception)
+        )
+
+    def test_tmux_has_session_returns_false_when_tmux_missing(self) -> None:
+        with mock.patch.object(runtime, "command_available", return_value=False):
+            self.assertFalse(runtime.tmux_has_session("nonexistent"))
+
+    def test_tmux_has_session_returns_false_for_nonexistent_session(self) -> None:
+        with mock.patch.object(runtime, "command_available", return_value=True):
+            result = runtime.tmux_has_session("nonexistent-session-name-xyz")
+            self.assertFalse(result)
+
+    def test_resolved_shell_executable_uses_pm_dawn_shell_override(self) -> None:
+        with mock.patch.dict("os.environ", {"PM_DAWN_SHELL": "/bin/sh"}, clear=False):
+            self.assertEqual("/bin/sh", runtime.resolved_shell_executable())
+
+    def test_resolved_shell_executable_falls_back_to_shell_detection(self) -> None:
+        with mock.patch.dict("os.environ", {"PM_DAWN_SHELL": ""}, clear=False):
+            shell = runtime.resolved_shell_executable()
+            self.assertIn("/", shell)
+
+    def test_resolved_shell_executable_skips_non_executable_match(self) -> None:
+        with mock.patch.dict(
+            "os.environ", {"PM_DAWN_SHELL": "/tmp/not-executable", "SHELL": ""},
+            clear=True
+        ):
+            with mock.patch("shutil.which", side_effect=["/tmp/not-executable", "/bin/sh"]):
+                with mock.patch("os.access", side_effect=[False, True]):
+                    self.assertEqual("/bin/sh", runtime.resolved_shell_executable())
+
+    def test_resolved_shell_executable_raises_when_no_shell_available(self) -> None:
+        with mock.patch.dict(
+            "os.environ", {"PM_DAWN_SHELL": "", "SHELL": ""}, clear=True
+        ):
+            with mock.patch("shutil.which", return_value=None):
+                with self.assertRaises(RuntimeError) as ctx:
+                    runtime.resolved_shell_executable()
+                self.assertIn("no usable shell found", str(ctx.exception))
+
+    def test_run_cmd_includes_exit_code_when_process_has_no_output(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=["example", "arg with spaces"],
+            returncode=7,
+            stdout="",
+            stderr="",
+        )
+        with mock.patch("subprocess.run", return_value=completed):
+            with self.assertRaises(RuntimeError) as ctx:
+                runtime.run_cmd(["example", "arg with spaces"])
+        self.assertIn("exit code 7", str(ctx.exception))
+        self.assertIn("arg with spaces", str(ctx.exception))
+
+    def test_epic_slice_plan_tracked_files_uses_shared_run_cmd(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=["rg", "--files", "."],
+            returncode=0,
+            stdout="alpha.py\nbeta.py\n",
+            stderr="",
+        )
+        with mock.patch.object(
+            epic_slice_plan_common, "run_cmd", return_value=completed
+        ) as run_cmd_mock:
+            result = epic_slice_plan_common.tracked_files(Path("/tmp/repo"), ".")
+
+        self.assertEqual(["alpha.py", "beta.py"], result)
+        run_cmd_mock.assert_called_once_with(["rg", "--files", "."], cwd=Path("/tmp/repo"))
+
+    def test_jira_pr_current_branch_uses_shared_run_cmd(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=["git", "branch", "--show-current"],
+            returncode=0,
+            stdout="feature/runtime-tests\n",
+            stderr="",
+        )
+        with mock.patch.object(
+            jira_pr_common, "run_cmd", return_value=completed
+        ) as run_cmd_mock:
+            branch = jira_pr_common.current_branch(Path("/tmp/repo"))
+
+        self.assertEqual("feature/runtime-tests", branch)
+        run_cmd_mock.assert_called_once_with(
+            ["git", "branch", "--show-current"], cwd=Path("/tmp/repo")
+        )
+
+    def test_jira_epic_review_run_acli_uses_shared_runtime_helpers(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=["acli", "jira", "auth", "status"],
+            returncode=0,
+            stdout='{"ok":true}\n',
+            stderr="",
+        )
+        with mock.patch.object(
+            jira_epic_review_common, "require_cli"
+        ) as require_cli_mock, mock.patch.object(
+            jira_epic_review_common, "run_cmd", return_value=completed
+        ) as run_cmd_mock:
+            output = jira_epic_review_common.run_acli(["jira", "auth", "status"])
+
+        self.assertEqual('{"ok":true}\n', output)
+        require_cli_mock.assert_called_once_with("acli")
+        run_cmd_mock.assert_called_once_with(
+            ["acli", "jira", "auth", "status"], check=False
         )
 
 
