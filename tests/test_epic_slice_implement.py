@@ -920,7 +920,6 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertEqual("pending_review", updated["status"])
             self.assertEqual("in_progress", updated["completion_state"])
             self.assertEqual({}, updated["artifacts"])
-
     def test_steer_slice_stops_at_pending_review_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
