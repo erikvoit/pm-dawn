@@ -97,12 +97,17 @@ Relevant runtime overrides:
 3. Prefer transcript-derived state over tmux-only heuristics:
    - sync against the actual `opencode` session when the harness is `opencode` and a session id exists
    - surface `phase`, `completion_state`, and any generated `.plan.md` or `.result.md` artifacts
+4. For implementation runs, also surface the review boundary explicitly:
+   - `implementation_monitor.review_ready=true` means the worker has reached `pending_review`
+   - that is the signal to review the result, not to keep steering the worker
+   - `completion_state` should remain reviewer-owned until acceptance
 
 ### Steer
 1. Load the handoff and run metadata.
 2. Build a corrective prompt.
 3. Send it to the existing session when the harness is `opencode` and runtime mode is `server`.
 4. Update run metadata.
+5. If the implementation run is already `pending_review`, stop and hand control back to the reviewer instead of sending more steering.
 
 **Note for Pi**: Pi does not support in-session follow-up prompts. A `changes_requested` turn in Pi triggers a fresh bounded revision run that reads the existing `.plan-review.md` and writes a new `.plan-response.md`. Revision is artifact/state monitoring, not a durable server attach/steer surface.
 
@@ -113,6 +118,10 @@ Relevant runtime overrides:
    - `<group-id>.plan.md` for planning completion
    - `<group-id>.result.md` for implementation completion
 4. Use these artifacts as the durable “done” signal for iterative review and follow-up.
+5. For implementation runs, treat `worker.status=pending_review` as a review boundary:
+   - write or preserve the `.result.md` artifact
+   - expose the implementation monitor state
+   - do not silently convert the run to reviewer-completed
 
 For `tmux-run`, do not fake reliable live steering. Report the limitation and prefer relaunching or continuing through a server-backed session.
 

@@ -14,6 +14,7 @@ from unittest import mock
 
 from pm_dawn_core.implement import (
     IMPLEMENT_COMMAND_SURFACES,
+    implementation_review_monitor_state,
     packet_plan_expected_artifact_path,
     packet_plan_monitor_state,
     packet_plan_requires_revision_run,
@@ -713,6 +714,74 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertTrue(
                 expected.name.endswith("consumer_enablement_4__01_contract.plan-response.md")
             )
+
+    def test_implementation_review_monitor_state_reports_pending_review_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+            accepted = implementation_plan_artifact_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            accepted.write_text("# accepted\n", encoding="utf-8")
+            state_path = packet_plan_review_state_path(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4__01_contract",
+            )
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "status": "accepted",
+                        "implementation_plan_artifact": str(accepted.resolve()),
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            monitor = implementation_review_monitor_state(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4",
+                "consumer_enablement_4__01_contract",
+                status="pending_review",
+                completion_state="completed",
+                worker={"status": "pending_review"},
+                last_action="worker_marked_pending_review",
+            )
+
+            self.assertEqual("pending_review", monitor["status"])
+            self.assertEqual("in_progress", monitor["completion_state"])
+            self.assertTrue(monitor["review_ready"])
+            self.assertFalse(monitor["waitable"])
+            self.assertEqual("review_result", monitor["next_action"])
+            self.assertEqual(str(accepted.resolve()), monitor["implementation_plan_artifact"])
+            self.assertTrue(str(monitor["result_artifact"]).endswith("consumer_enablement_4.result.md"))
+
+    def test_implementation_review_monitor_state_flags_completed_without_review_signal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+
+            monitor = implementation_review_monitor_state(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4",
+                None,
+                status="completed",
+                completion_state="completed",
+                worker={},
+                last_action="launch",
+            )
+
+            self.assertEqual("completed_without_review_signal", monitor["status"])
+            self.assertEqual("completed", monitor["completion_state"])
+            self.assertFalse(monitor["review_ready"])
+            self.assertFalse(monitor["waitable"])
+            self.assertEqual("inspect_completion", monitor["next_action"])
 
     def test_build_launch_prompt_includes_reviewed_plan_rules(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

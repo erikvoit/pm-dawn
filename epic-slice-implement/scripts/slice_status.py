@@ -19,7 +19,11 @@ from common import (
     session_runtime_status,
 )
 from pm_dawn_core.layout import run_metadata_path
-from pm_dawn_core.implement import packet_plan_monitor_state, resolve_packet_plan_review_state
+from pm_dawn_core.implement import (
+    implementation_review_monitor_state,
+    packet_plan_monitor_state,
+    resolve_packet_plan_review_state,
+)
 from pm_dawn_core.profile import repo_root
 
 
@@ -75,6 +79,24 @@ def main() -> None:
     else:
         status = data.get("status", "stopped")
 
+    implementation_monitor = (
+        implementation_review_monitor_state(
+            root,
+            args.epic_key,
+            args.group_id,
+            packet_id if isinstance(packet_id, str) else None,
+            status=status,
+            completion_state=completion_state,
+            worker=data.get("worker", {}),
+            last_action=data.get("last_action"),
+        )
+        if phase == "implementing"
+        else None
+    )
+    if implementation_monitor is not None:
+        status = implementation_monitor["status"]
+        completion_state = implementation_monitor["completion_state"]
+
     payload = {
         "harness": harness,
         "status": status,
@@ -93,6 +115,7 @@ def main() -> None:
         "packet_id": data.get("packet_id"),
         "plan_review": plan_review,
         "plan_monitor": plan_monitor,
+        "implementation_monitor": implementation_monitor,
         "handoff_path": data.get("handoff_path"),
         "last_action": data.get("last_action"),
         "artifacts": data.get("artifacts", {}),
