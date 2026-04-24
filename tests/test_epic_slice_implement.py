@@ -823,6 +823,104 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertTrue(payload["implementation_monitor"]["review_ready"])
             self.assertEqual("review_result", payload["implementation_monitor"]["next_action"])
 
+    def test_sync_slice_session_state_does_not_write_result_without_flag_at_review_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            run_metadata = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "runs"
+                / "consumer_enablement_3.json"
+            )
+            write_fixture(
+                run_metadata,
+                json.dumps(
+                    {
+                        "schema_version": "v1",
+                        "epic_key": "RPVINF-124",
+                        "group_id": "consumer_enablement_3",
+                        "packet_id": "consumer_enablement_3__02_wiring",
+                        "harness": "opencode",
+                        "phase": "implementing",
+                        "status": "running",
+                        "completion_state": "in_progress",
+                        "last_action": "worker_marked_pending_review",
+                        "worker": {"status": "pending_review"},
+                        "runtime": {"session_id": "ses_test"},
+                        "artifacts": {},
+                        "time": {"created": "2026-04-24T00:00:00Z"},
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+            sync_spec = importlib.util.spec_from_file_location(
+                "epic_slice_sync_state_test",
+                SCRIPT_ROOT / "sync_slice_session_state.py",
+            )
+            assert sync_spec is not None and sync_spec.loader is not None
+            sync_module = importlib.util.module_from_spec(sync_spec)
+            session_export = {
+                "info": {"id": "ses_test", "title": "test session"},
+                "messages": [
+                    {
+                        "info": {
+                            "role": "assistant",
+                            "time": {"completed": "2026-04-24T00:00:05Z"},
+                            "finish": "stop",
+                        },
+                        "parts": [{"type": "text", "text": "done"}],
+                    }
+                ],
+            }
+
+            original_common = sys.modules.pop("common", None)
+            try:
+                with mock.patch.object(sys, "path", [str(SCRIPT_ROOT), *sys.path]):
+                    sync_spec.loader.exec_module(sync_module)
+            finally:
+                sys.modules.pop("common", None)
+                if original_common is not None:
+                    sys.modules["common"] = original_common
+
+            with mock.patch.object(
+                sync_module,
+                "parse_args",
+                return_value=type(
+                    "Args",
+                    (),
+                    {
+                        "epic_key": "RPVINF-124",
+                        "group_id": "consumer_enablement_3",
+                        "repo_root": str(root),
+                        "phase": None,
+                        "write_artifacts": False,
+                        "overwrite_artifacts": False,
+                    },
+                )(),
+            ), mock.patch.object(
+                sync_module, "export_session_json", return_value=session_export
+            ), mock.patch.object(sync_module, "emit_json"):
+                sync_module.main()
+
+            result_path = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "runs"
+                / "consumer_enablement_3.result.md"
+            )
+            self.assertFalse(result_path.exists())
+            updated = json.loads(run_metadata.read_text(encoding="utf-8"))
+            self.assertEqual("pending_review", updated["status"])
+            self.assertEqual("in_progress", updated["completion_state"])
+            self.assertEqual({}, updated["artifacts"])
+
     def test_steer_slice_stops_at_pending_review_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
