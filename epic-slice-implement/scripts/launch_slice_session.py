@@ -37,6 +37,7 @@ from common import (
 from pm_dawn_core.implement import (
     build_launch_prompt,
     harness_monitoring_settings,
+    implementation_review_monitor_state,
     load_execution_input,
     packet_plan_monitor_state,
     packet_plan_requires_acceptance,
@@ -186,6 +187,20 @@ def main() -> None:
     if approved_plan:
         payload["approved_plan"] = str(approved_plan)
     payload["monitoring"] = harness_monitoring_settings(root, harness)
+    payload["implementation_monitor"] = (
+        implementation_review_monitor_state(
+            root,
+            args.epic_key,
+            args.group_id,
+            args.packet_id,
+            status=payload["status"],
+            completion_state="in_progress",
+            worker=None,
+            last_action=payload["last_action"],
+        )
+        if args.phase == "implementing"
+        else None
+    )
 
     if args.dry_run:
         if harness == "pi":

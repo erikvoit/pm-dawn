@@ -50,6 +50,7 @@ Steering expectations:
 - `tmux-run` is not treated as reliably steerable; prefer relaunch or server-backed continuation
 - for OpenCode `server` mode: follow-up prompts against the same session are supported
 - for Pi: revision is artifact-driven (relaunch with new `.plan-response.md` input), not conversational steering
+- once an implementation run reaches `pending_review`, stop steering and hand off to reviewer/Codex
 
 Completion/result flow:
 - do not infer completion from tmux alone
@@ -61,6 +62,11 @@ Completion/result flow:
   - `worker.status: pending_review`
   - this means “the worker believes the packet is ready for review”
   - it does not mean the packet is accepted
+- PM Dawn should surface that state as an explicit implementation monitor boundary:
+  - `status: pending_review`
+  - `implementation_monitor.review_ready: true`
+  - `implementation_monitor.next_action: review_result`
+  - keep reviewer acceptance separate from worker completion
 - in the common Codex-Pi flow, Codex reviews Pi-authored proposals, may request changes, and explicitly accepts the brief before implementation launch
 - when a phase finishes cleanly, capture the final assistant output into:
   - `<group-id>.plan.md` for planning

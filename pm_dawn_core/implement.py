@@ -15,6 +15,7 @@ from .layout import (
     packet_plan_response_artifact_path,
     packet_plan_review_artifact_path,
     packet_plan_review_state_path,
+    run_artifact_path,
     slice_markdown_path,
 )
 from .markdown import parse_packet_markdown, parse_slice_markdown
@@ -105,6 +106,19 @@ class PacketPlanReviewStateSnapshot:
         if self.status == "accepted":
             return self.implementation_plan_artifact
         return None
+
+
+@dataclass(frozen=True)
+class ImplementationReviewMonitorSnapshot:
+    status: str
+    completion_state: str | None
+    review_ready: bool
+    waitable: bool
+    next_action: str
+    implementation_plan_artifact: Path | None
+    result_artifact: Path | None
+    worker_status: str | None
+    worker_note: str | None
 
 
 IMPLEMENT_COMMAND_SURFACES = (
@@ -590,6 +604,96 @@ def packet_plan_requires_acceptance(root: Path, epic_key: str, packet_id: str) -
     review = packet_plan_review_artifact_path(root, epic_key, packet_id)
     response = packet_plan_response_artifact_path(root, epic_key, packet_id)
     return any(path.exists() for path in (proposal, review, response))
+
+
+def implementation_review_monitor_state(
+    root: Path,
+    epic_key: str,
+    group_id: str,
+    packet_id: str | None,
+    *,
+    status: str | None = None,
+    completion_state: str | None = None,
+    worker: dict | None = None,
+    last_action: str | None = None,
+) -> dict[str, object]:
+    implementation_plan = (
+        resolve_approved_plan_path(root, epic_key, packet_id, None) if packet_id else None
+    )
+    result_artifact = run_artifact_path(root, epic_key, group_id, "result")
+    worker_payload = worker if isinstance(worker, dict) else {}
+    worker_status = worker_payload.get("status")
+    worker_note = worker_payload.get("note")
+    review_ready = bool(
+        status == "pending_review"
+        or worker_status == "pending_review"
+        or last_action == "worker_marked_pending_review"
+    )
+
+    if review_ready:
+        snapshot = ImplementationReviewMonitorSnapshot(
+            status="pending_review",
+            completion_state="in_progress",
+            review_ready=True,
+            waitable=False,
+            next_action="review_result",
+            implementation_plan_artifact=implementation_plan,
+            result_artifact=result_artifact,
+            worker_status=worker_status if isinstance(worker_status, str) else None,
+            worker_note=worker_note if isinstance(worker_note, str) else None,
+        )
+    elif completion_state in {"failed", "timed_out"}:
+        snapshot = ImplementationReviewMonitorSnapshot(
+            status=status or str(completion_state),
+            completion_state=completion_state,
+            review_ready=False,
+            waitable=False,
+            next_action="inspect_failure",
+            implementation_plan_artifact=implementation_plan,
+            result_artifact=result_artifact,
+            worker_status=worker_status if isinstance(worker_status, str) else None,
+            worker_note=worker_note if isinstance(worker_note, str) else None,
+        )
+    elif completion_state == "completed":
+        snapshot = ImplementationReviewMonitorSnapshot(
+            status="completed_without_review_signal",
+            completion_state="completed",
+            review_ready=False,
+            waitable=False,
+            next_action="inspect_completion",
+            implementation_plan_artifact=implementation_plan,
+            result_artifact=result_artifact,
+            worker_status=worker_status if isinstance(worker_status, str) else None,
+            worker_note=worker_note if isinstance(worker_note, str) else None,
+        )
+    else:
+        current_status = status or "unknown"
+        waitable = current_status in {"prepared", "launched", "running", "steered"}
+        snapshot = ImplementationReviewMonitorSnapshot(
+            status=current_status,
+            completion_state=completion_state,
+            review_ready=False,
+            waitable=waitable,
+            next_action="wait_for_worker" if waitable else "inspect_run_state",
+            implementation_plan_artifact=implementation_plan,
+            result_artifact=result_artifact,
+            worker_status=worker_status if isinstance(worker_status, str) else None,
+            worker_note=worker_note if isinstance(worker_note, str) else None,
+        )
+
+    return {
+        "status": snapshot.status,
+        "completion_state": snapshot.completion_state,
+        "review_ready": snapshot.review_ready,
+        "waitable": snapshot.waitable,
+        "next_action": snapshot.next_action,
+        "implementation_plan_artifact": (
+            str(snapshot.implementation_plan_artifact) if snapshot.implementation_plan_artifact else None
+        ),
+        "result_artifact": str(snapshot.result_artifact) if snapshot.result_artifact else None,
+        "worker_status": snapshot.worker_status,
+        "worker_note": snapshot.worker_note,
+    }
 
 
 def initialize_packet_plan_review_state(root: Path, epic_key: str, packet_id: str) -> Path:

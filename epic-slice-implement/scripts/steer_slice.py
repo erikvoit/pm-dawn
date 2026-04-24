@@ -14,10 +14,11 @@ from common import (
     attach_instructions,
     build_steer_prompt,
     emit_json,
-    parse_slice_markdown,
     read_json,
 )
 from pm_dawn_core.layout import run_metadata_path
+from pm_dawn_core.implement import implementation_review_monitor_state
+from pm_dawn_core.markdown import parse_slice_markdown
 from pm_dawn_core.profile import repo_root
 from pm_dawn_core.runtime import require_cli, run_cmd
 
@@ -45,6 +46,30 @@ def main() -> None:
     else:
         handoff = parse_slice_markdown(handoff_path)
     runtime = run_meta.get("runtime_mode")
+    implementation_monitor = (
+        implementation_review_monitor_state(
+            root,
+            args.epic_key,
+            args.group_id,
+            run_meta.get("packet_id"),
+            status=run_meta.get("status"),
+            completion_state=run_meta.get("completion_state"),
+            worker=run_meta.get("worker", {}),
+            last_action=run_meta.get("last_action"),
+        )
+        if run_meta.get("phase", "implementing") == "implementing"
+        else None
+    )
+    if implementation_monitor is not None and implementation_monitor["review_ready"]:
+        emit_json(
+            {
+                "status": "review_boundary_reached",
+                "reason": "worker is already pending review; review or accept the packet before sending more steering",
+                "implementation_monitor": implementation_monitor,
+                "attach_instructions": run_meta.get("attach_instructions", []),
+            }
+        )
+        return
     prompt = build_steer_prompt(handoff, handoff_path, root, args.steering_message)
 
     if harness != "opencode" or runtime == "tmux-run":

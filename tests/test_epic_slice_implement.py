@@ -37,6 +37,7 @@ GENERATE_PACKET_IMPLEMENTATION_PLAN = (
 COORDINATE_PLAN_REVIEW = (
     REPO_ROOT / "epic-slice-implement" / "scripts" / "coordinate_plan_review.py"
 )
+STEER_SLICE = REPO_ROOT / "epic-slice-implement" / "scripts" / "steer_slice.py"
 MIGRATE_PM_DAWN_LAYOUT = (
     REPO_ROOT / "epic-slice-implement" / "scripts" / "migrate_pm_dawn_layout.py"
 )
@@ -258,6 +259,11 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
 
             payload = json.loads(result.stdout)
             self.assertEqual("pi", payload["harness"])
+            self.assertEqual("pending_review", payload["status"])
+            self.assertEqual("in_progress", payload["completion_state"])
+            self.assertEqual("pending_review", payload["implementation_monitor"]["status"])
+            self.assertTrue(payload["implementation_monitor"]["review_ready"])
+            self.assertEqual("review_result", payload["implementation_monitor"]["next_action"])
             self.assertEqual("pending_review", payload["status"])
             self.assertEqual("implementing", payload["phase"])
             self.assertEqual("in_progress", payload["completion_state"])
@@ -764,6 +770,165 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                 },
                 payload["monitoring"],
             )
+            self.assertEqual("in_progress", payload["implementation_monitor"]["completion_state"])
+            self.assertFalse(payload["implementation_monitor"]["review_ready"])
+            self.assertTrue(payload["implementation_monitor"]["waitable"])
+            self.assertEqual("wait_for_worker", payload["implementation_monitor"]["next_action"])
+
+    def test_sync_slice_session_state_non_opencode_includes_implementation_monitor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            run_metadata = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "runs"
+                / "consumer_enablement_3.json"
+            )
+            write_fixture(
+                run_metadata,
+                json.dumps(
+                    {
+                        "schema_version": "v1",
+                        "epic_key": "RPVINF-124",
+                        "group_id": "consumer_enablement_3",
+                        "packet_id": "consumer_enablement_3__02_wiring",
+                        "harness": "pi",
+                        "phase": "implementing",
+                        "status": "pending_review",
+                        "completion_state": "in_progress",
+                        "last_action": "worker_marked_pending_review",
+                        "worker": {"status": "pending_review"},
+                        "runtime": {"session_dir": "/tmp/pi"},
+                        "artifacts": {},
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+
+            result = self.run_script(
+                SCRIPT_ROOT / "sync_slice_session_state.py",
+                "RPVINF-124",
+                "consumer_enablement_3",
+                "--repo-root",
+                str(root),
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual("pending_review", payload["status"])
+            self.assertEqual("in_progress", payload["completion_state"])
+            self.assertTrue(payload["implementation_monitor"]["review_ready"])
+            self.assertEqual("review_result", payload["implementation_monitor"]["next_action"])
+
+    def test_steer_slice_stops_at_pending_review_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            write_fixture(
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "slices"
+                / "consumer_enablement_3.md",
+                "\n".join(
+                    [
+                        "# RPVINF-124 / consumer_enablement_3",
+                        "",
+                        "Group ID: consumer_enablement_3",
+                        "Primary Jira Key: RPVINF-127",
+                        "Secondary Jira Keys: None",
+                        "",
+                        "Goal:",
+                        "- Validate unattended implementation review coordination.",
+                        "",
+                        "Branch Recommendation:",
+                        "- feature/RPVINF-135-implementation-review",
+                        "",
+                        "PR Traceability:",
+                        "- Primary: RPVINF-135",
+                        "- Additional: None",
+                        "",
+                        "Entry Criteria:",
+                        "- None",
+                        "",
+                        "Exit Criteria:",
+                        "- None",
+                        "",
+                        "Repo Surfaces:",
+                        "- epic-slice-implement/",
+                        "",
+                        "Implementation Steps:",
+                        "- Keep the slice handoff loadable.",
+                        "",
+                        "Validation Steps:",
+                        "- Run make check.",
+                        "",
+                        "Risks and Constraints:",
+                        "- None",
+                        "",
+                        "Open Questions:",
+                        "- None",
+                        "",
+                        "Source Review Context:",
+                        "- Derived from epic review of RPVINF-124 on 2026-04-23.",
+                        "- This story is best handled as an individual PR-sized unit after its blockers land.",
+                        "",
+                    ]
+                ),
+            )
+            write_fixture(
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-124"
+                / "ops"
+                / "runs"
+                / "consumer_enablement_3.json",
+                json.dumps(
+                    {
+                        "schema_version": "v1",
+                        "epic_key": "RPVINF-124",
+                        "group_id": "consumer_enablement_3",
+                        "packet_id": "consumer_enablement_3__02_wiring",
+                        "handoff_path": str(
+                            root
+                            / ".pm-dawn"
+                            / "epics"
+                            / "RPVINF-124"
+                            / "slices"
+                            / "consumer_enablement_3.md"
+                        ),
+                        "branch_name": "feature/RPVINF-135-implementation-review",
+                        "harness": "opencode",
+                        "runtime_mode": "server",
+                        "status": "pending_review",
+                        "phase": "implementing",
+                        "completion_state": "in_progress",
+                        "last_action": "worker_marked_pending_review",
+                        "attach_instructions": ["tmux attach -t opencode-session"],
+                        "worker": {"status": "pending_review"},
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+
+            result = self.run_script(
+                STEER_SLICE,
+                "RPVINF-124",
+                "consumer_enablement_3",
+                "Please keep going",
+                "--repo-root",
+                str(root),
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual("review_boundary_reached", payload["status"])
+            self.assertTrue(payload["implementation_monitor"]["review_ready"])
+            self.assertEqual(["tmux attach -t opencode-session"], payload["attach_instructions"])
 
 
 class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):

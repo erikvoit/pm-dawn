@@ -74,11 +74,21 @@ Runtime metadata fields:
 - `artifacts.plan_md`
 - `artifacts.implementation_plan_md`
 - `artifacts.result_md`
+- `monitoring.initial_session_check_seconds`
+- `monitoring.planning_artifact_grace_period_seconds`
+- `monitoring.implementation_artifact_grace_period_seconds`
 - `plan_review.status`
 - `plan_review.proposal_artifact`
 - `plan_review.review_artifact`
 - `plan_review.response_artifact`
 - `plan_review.implementation_plan_artifact`
+- `implementation_monitor.status`
+- `implementation_monitor.completion_state`
+- `implementation_monitor.review_ready`
+- `implementation_monitor.waitable`
+- `implementation_monitor.next_action`
+- `implementation_monitor.implementation_plan_artifact`
+- `implementation_monitor.result_artifact`
 
 Phase/result artifacts live alongside the run metadata:
 - `.pm-dawn/epics/<epic-key>/ops/runs/<group-id>.plan.md`
@@ -111,6 +121,11 @@ Use them as the durable completion signal:
 Worker-owned review signal:
 - `worker.status=pending_review` means the implementation worker believes the packet is ready for review
 - this is not equivalent to acceptance or `completion_state=completed`
+
+Implementation monitor boundary:
+- `implementation_monitor.review_ready=true` means the run has reached the reviewer boundary
+- `implementation_monitor.next_action=review_result` means stop steering and start review
+- `implementation_monitor.status=pending_review` should not be collapsed into reviewer acceptance
 
 Review protocol boundary:
 - worker-authored packet plan proposals are drafts for reviewer approval

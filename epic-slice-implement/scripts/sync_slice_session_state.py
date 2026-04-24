@@ -23,7 +23,11 @@ from common import (
     write_text,
 )
 from pm_dawn_core.layout import run_artifact_path, run_metadata_path
-from pm_dawn_core.implement import packet_plan_monitor_state, resolve_packet_plan_review_state
+from pm_dawn_core.implement import (
+    implementation_review_monitor_state,
+    packet_plan_monitor_state,
+    resolve_packet_plan_review_state,
+)
 from pm_dawn_core.profile import repo_root
 
 
@@ -61,16 +65,35 @@ def main() -> None:
     runtime = run_meta.get("runtime", {})
     session_id = runtime.get("session_id") or run_meta.get("opencode", {}).get("session_id")
     if harness != "opencode":
+        implementation_monitor = (
+            implementation_review_monitor_state(
+                root,
+                args.epic_key,
+                args.group_id,
+                packet_id if isinstance(packet_id, str) else None,
+                status=run_meta.get("status"),
+                completion_state=run_meta.get("completion_state"),
+                worker=run_meta.get("worker", {}),
+                last_action=run_meta.get("last_action"),
+            )
+            if run_meta.get("phase") == "implementing"
+            else None
+        )
         payload = {
-            "status": run_meta.get("status", "unknown"),
+            "status": implementation_monitor["status"] if implementation_monitor else run_meta.get("status", "unknown"),
             "phase": run_meta.get("phase"),
-            "completion_state": run_meta.get("completion_state"),
+            "completion_state": (
+                implementation_monitor["completion_state"]
+                if implementation_monitor
+                else run_meta.get("completion_state")
+            ),
             "harness": harness,
             "session_dir": runtime.get("session_dir"),
             "artifacts": run_meta.get("artifacts", {}),
             "worker": run_meta.get("worker", {}),
             "plan_review": plan_review,
             "plan_monitor": plan_monitor,
+            "implementation_monitor": implementation_monitor,
             "warning": "transcript sync is currently only supported for opencode-backed sessions",
         }
         emit_json(payload)
@@ -81,15 +104,34 @@ def main() -> None:
     try:
         session_export = export_session_json(session_id)
     except RuntimeError as exc:
+        implementation_monitor = (
+            implementation_review_monitor_state(
+                root,
+                args.epic_key,
+                args.group_id,
+                packet_id if isinstance(packet_id, str) else None,
+                status=run_meta.get("status"),
+                completion_state=run_meta.get("completion_state"),
+                worker=run_meta.get("worker", {}),
+                last_action=run_meta.get("last_action"),
+            )
+            if run_meta.get("phase") == "implementing"
+            else None
+        )
         payload = {
-            "status": run_meta.get("status", "unknown"),
+            "status": implementation_monitor["status"] if implementation_monitor else run_meta.get("status", "unknown"),
             "phase": run_meta.get("phase"),
-            "completion_state": run_meta.get("completion_state"),
+            "completion_state": (
+                implementation_monitor["completion_state"]
+                if implementation_monitor
+                else run_meta.get("completion_state")
+            ),
             "opencode_session_id": session_id,
             "artifacts": run_meta.get("artifacts", {}),
             "worker": run_meta.get("worker", {}),
             "plan_review": plan_review,
             "plan_monitor": plan_monitor,
+            "implementation_monitor": implementation_monitor,
             "warning": str(exc),
         }
         emit_json(payload)
@@ -98,6 +140,23 @@ def main() -> None:
     completion_state = session_completion_state(session_export)
     status = session_runtime_status(run_meta, completion_state)
     completed_message = latest_completed_assistant_message(session_export, require_text=True)
+    implementation_monitor = (
+        implementation_review_monitor_state(
+            root,
+            args.epic_key,
+            args.group_id,
+            packet_id if isinstance(packet_id, str) else None,
+            status=status,
+            completion_state=completion_state,
+            worker=run_meta.get("worker", {}),
+            last_action=run_meta.get("last_action"),
+        )
+        if phase == "implementing"
+        else None
+    )
+    if implementation_monitor is not None:
+        status = implementation_monitor["status"]
+        completion_state = implementation_monitor["completion_state"]
 
     artifacts = run_meta.get("artifacts", {}).copy() if isinstance(run_meta.get("artifacts"), dict) else {}
     should_write = False
@@ -106,6 +165,13 @@ def main() -> None:
             should_write = True
         elif completion_state == "completed":
             should_write = True
+    if (
+        phase == "implementing"
+        and completed_message
+        and implementation_monitor is not None
+        and implementation_monitor["review_ready"]
+    ):
+        should_write = True
     if should_write:
         artifact_kind = "plan" if phase == "planning" else "result"
         artifact_path = run_artifact_path(root, args.epic_key, args.group_id, artifact_kind)
@@ -145,6 +211,7 @@ def main() -> None:
         "worker": updated.get("worker", {}),
         "plan_review": plan_review,
         "plan_monitor": plan_monitor,
+        "implementation_monitor": implementation_monitor,
     }
     emit_json(payload)
 
