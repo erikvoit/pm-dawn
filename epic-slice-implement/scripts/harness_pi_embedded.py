@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
@@ -24,6 +25,8 @@ PiEmbeddedSessionState = Literal[
     "closed",
     "failed",
 ]
+
+STATE_PERSIST_MIN_INTERVAL_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -109,7 +112,6 @@ class PiEmbeddedSessionAdapter:
             protocol=capabilities.protocol,
             process_id=process.pid,
         )
-        _write_snapshot(self.session_dir, snapshot)
         return snapshot
 
     def submit(self, prompt: str) -> PiEmbeddedSessionSnapshot:
@@ -125,6 +127,7 @@ class PiEmbeddedSessionAdapter:
             fallback=snapshot,
             state="processing",
             event={"type": "prompt_queued"},
+            persist=False,
         )
 
     def observe(self) -> PiEmbeddedSessionSnapshot:
@@ -175,6 +178,7 @@ class PiEmbeddedSessionAdapter:
             fallback=snapshot,
             state="processing",
             event={"type": "steer_queued"},
+            persist=False,
         )
 
     def follow_up(self, message: str) -> PiEmbeddedSessionSnapshot:
@@ -200,6 +204,7 @@ class PiEmbeddedSessionAdapter:
             fallback=snapshot,
             state="awaiting_input",
             event={"type": "follow_up_queued"},
+            persist=False,
         )
 
     def close(self) -> PiEmbeddedSessionSnapshot:
@@ -220,6 +225,7 @@ class PiEmbeddedSessionAdapter:
             fallback=snapshot,
             state="closed",
             event={"type": "close_queued"},
+            persist=False,
         )
 
 
@@ -355,7 +361,7 @@ def _start_runner(
     env.setdefault("PI_OFFLINE", "0")
     log = _runner_log_path(session_dir).open("ab")
     try:
-        return subprocess.Popen(
+        process = subprocess.Popen(
             args,
             cwd=str(root),
             stdin=subprocess.DEVNULL,
@@ -364,6 +370,7 @@ def _start_runner(
             env=env,
             start_new_session=True,
         )
+        return process
     except OSError as exc:
         snapshot = PiEmbeddedSessionSnapshot(
             session_id=None,
@@ -376,6 +383,8 @@ def _start_runner(
         )
         _write_snapshot(session_dir, snapshot)
         raise
+    finally:
+        log.close()
 
 
 def _queue_command(session_dir: Path, command: dict[str, object]) -> None:
@@ -432,31 +441,47 @@ def _snapshot_from_payload(
 
 def _write_snapshot(session_dir: Path, snapshot: PiEmbeddedSessionSnapshot) -> None:
     session_dir.mkdir(parents=True, exist_ok=True)
-    _state_path(session_dir).write_text(
+    path = _state_path(session_dir)
+    temp_path = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    temp_path.write_text(
         json.dumps(snapshot.to_payload(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    os.replace(temp_path, path)
 
 
 def _read_events(session_dir: Path, limit: int = 20) -> list[dict[str, object]]:
     path = _events_path(session_dir)
     if not path.exists():
         return []
-    events: list[dict[str, object]] = []
-    for line in path.read_text(encoding="utf-8").splitlines()[-limit:]:
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(event, dict):
-            events.append(event)
-    return events
+    events: deque[dict[str, object]] = deque(maxlen=limit)
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(event, dict):
+                events.append(event)
+    return list(events)
 
 
-def _append_event(session_dir: Path, event: dict[str, object]) -> list[dict[str, object]]:
+def _bounded_events(events: list[dict[str, object]], event: dict[str, object], limit: int = 20) -> list[dict[str, object]]:
+    return [*events, event][-limit:]
+
+
+def _append_event(
+    session_dir: Path,
+    event: dict[str, object],
+    *,
+    events: list[dict[str, object]] | None = None,
+) -> list[dict[str, object]]:
     session_dir.mkdir(parents=True, exist_ok=True)
+    recorded = {"time": time.time(), **event}
     with _events_path(session_dir).open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps({"time": time.time(), **event}, sort_keys=True) + "\n")
+        handle.write(json.dumps(recorded, sort_keys=True) + "\n")
+    if events is not None:
+        return _bounded_events(events, recorded)
     return _read_events(session_dir)
 
 
@@ -467,8 +492,9 @@ def _snapshot_with_event(
     state: PiEmbeddedSessionState,
     event: dict[str, object],
     fallback_reason: str | None = None,
+    persist: bool = True,
 ) -> PiEmbeddedSessionSnapshot:
-    events = _append_event(session_dir, event)
+    events = _append_event(session_dir, event, events=fallback.events)
     snapshot = PiEmbeddedSessionSnapshot(
         session_id=fallback.session_id,
         state=state,
@@ -480,7 +506,8 @@ def _snapshot_with_event(
         process_id=fallback.process_id,
         fallback_reason=fallback_reason,
     )
-    _write_snapshot(session_dir, snapshot)
+    if persist:
+        _write_snapshot(session_dir, snapshot)
     return snapshot
 
 
@@ -520,15 +547,30 @@ def _runner_main() -> None:
         session_id=None,
         state="idle",
         capabilities=capabilities,
-        events=_append_event(session_dir, {"type": "runner_ready", "process_id": runner_pid}),
+        events=_append_event(session_dir, {"type": "runner_ready", "process_id": runner_pid}, events=[]),
         session_dir=str(session_dir),
         protocol=capabilities.protocol,
         process_id=runner_pid,
     )
     _write_snapshot(session_dir, initial)
+    state_lock = threading.Lock()
+    state_holder = {"snapshot": initial, "last_persisted": time.time()}
     if args.title:
         _write_rpc_command(process, {"type": "set_session_name", "name": args.title})
     _write_rpc_command(process, {"type": "get_state"})
+
+    def update_snapshot_from_event(event: dict[str, object], *, state: PiEmbeddedSessionState | None = None) -> None:
+        with state_lock:
+            current = state_holder["snapshot"]
+            assert isinstance(current, PiEmbeddedSessionSnapshot)
+            state_holder["snapshot"] = _snapshot_with_event(
+                session_dir,
+                fallback=current,
+                state=state or current.state,
+                event=event,
+                persist=True,
+            )
+            state_holder["last_persisted"] = time.time()
 
     def read_stdout() -> None:
         assert process.stdout is not None
@@ -539,16 +581,34 @@ def _runner_main() -> None:
             try:
                 payload = json.loads(line)
             except json.JSONDecodeError:
-                _append_event(session_dir, {"type": "non_json_stdout", "text": line[-500:]})
+                update_snapshot_from_event({"type": "non_json_stdout", "text": line[-500:]})
                 continue
-            _handle_rpc_output(session_dir, capabilities, payload, runner_pid)
+            event_type = payload.get("type")
+            now = time.time()
+            with state_lock:
+                current = state_holder["snapshot"]
+                assert isinstance(current, PiEmbeddedSessionSnapshot)
+                should_persist = (
+                    event_type not in {"message_update", "tool_execution_update"}
+                    or now - float(state_holder["last_persisted"]) >= STATE_PERSIST_MIN_INTERVAL_SECONDS
+                )
+                state_holder["snapshot"] = _handle_rpc_output(
+                    session_dir,
+                    capabilities,
+                    payload,
+                    current,
+                    runner_pid,
+                    persist=should_persist,
+                )
+                if should_persist:
+                    state_holder["last_persisted"] = now
 
     def read_stderr() -> None:
         assert process.stderr is not None
         for raw_line in process.stderr:
             line = raw_line.strip()
             if line:
-                _append_event(session_dir, {"type": "stderr", "text": line[-500:]})
+                update_snapshot_from_event({"type": "stderr", "text": line[-500:]})
 
     stdout_thread = threading.Thread(target=read_stdout, daemon=True)
     stderr_thread = threading.Thread(target=read_stderr, daemon=True)
@@ -567,9 +627,11 @@ def _runner_main() -> None:
             time.sleep(0.25)
     finally:
         exit_code = process.poll()
+        current = state_holder["snapshot"]
+        assert isinstance(current, PiEmbeddedSessionSnapshot)
         _snapshot_with_event(
             session_dir,
-            fallback=_snapshot_from_state(session_dir, capabilities=capabilities) or initial,
+            fallback=current,
             state="closed" if exit_code == 0 else "failed",
             event={"type": "runner_exit", "exit_code": exit_code},
             fallback_reason=None if exit_code == 0 else "embedded Pi RPC process exited unexpectedly",
@@ -613,14 +675,16 @@ def _handle_rpc_output(
     session_dir: Path,
     capabilities: PiEmbeddedCapabilities,
     payload: dict[str, object],
+    current: PiEmbeddedSessionSnapshot,
     runner_pid: int,
-) -> None:
+    *,
+    persist: bool,
+) -> PiEmbeddedSessionSnapshot:
     event_type = payload.get("type")
-    events = _append_event(session_dir, _summarize_rpc_payload(payload))
-    current = _snapshot_from_state(session_dir, capabilities=capabilities)
-    state: PiEmbeddedSessionState = current.state if current else "idle"
-    session_id = current.session_id if current else None
-    session_file = current.session_file if current else None
+    events = _append_event(session_dir, _summarize_rpc_payload(payload), events=current.events)
+    state = current.state
+    session_id = current.session_id
+    session_file = current.session_file
     fallback_reason = None
     if event_type == "agent_start":
         state = "processing"
@@ -652,7 +716,9 @@ def _handle_rpc_output(
         process_id=runner_pid,
         fallback_reason=fallback_reason,
     )
-    _write_snapshot(session_dir, snapshot)
+    if persist:
+        _write_snapshot(session_dir, snapshot)
+    return snapshot
 
 
 def _summarize_rpc_payload(payload: dict[str, object]) -> dict[str, object]:
