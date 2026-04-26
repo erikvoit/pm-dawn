@@ -102,6 +102,64 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             text=True,
         )
 
+    def write_minimal_slice(self, root: Path) -> Path:
+        slice_path = (
+            root
+            / ".pm-dawn"
+            / "epics"
+            / "RPVINF-134"
+            / "slices"
+            / "embedded_pi_session_adapter.md"
+        )
+        write_fixture(
+            slice_path,
+            "\n".join(
+                [
+                    "# RPVINF-134 / embedded_pi_session_adapter",
+                    "",
+                    "Group ID: embedded_pi_session_adapter",
+                    "Primary Jira Key: RPVINF-134",
+                    "Secondary Jira Keys: None",
+                    "",
+                    "Goal:",
+                    "- Evaluate an embedded Pi session adapter.",
+                    "",
+                    "Branch Recommendation:",
+                    "- feature/RPVINF-134-embedded-pi-session-adapter",
+                    "",
+                    "PR Traceability:",
+                    "- Primary: RPVINF-134",
+                    "- Additional: None",
+                    "",
+                    "Entry Criteria:",
+                    "- None",
+                    "",
+                    "Exit Criteria:",
+                    "- None",
+                    "",
+                    "Repo Surfaces:",
+                    "- epic-slice-implement/scripts/harness_pi_embedded.py",
+                    "",
+                    "Implementation Steps:",
+                    "- Keep embedded Pi sessions optional.",
+                    "",
+                    "Validation Steps:",
+                    "- Run make check.",
+                    "",
+                    "Risks and Constraints:",
+                    "- Do not change PM Dawn core runtime dependencies.",
+                    "",
+                    "Open Questions:",
+                    "- None",
+                    "",
+                    "Source Review Context:",
+                    "- Derived from Jira story RPVINF-134 on 2026-04-26.",
+                    "",
+                ]
+            ),
+        )
+        return slice_path
+
     def test_cleanup_slice_artifacts_dry_run_uses_shared_targets(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
@@ -519,6 +577,56 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                 )
             )
 
+    def test_slice_status_surfaces_embedded_session_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            run_metadata = (
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-134"
+                / "ops"
+                / "runs"
+                / "embedded_pi_session_adapter.json"
+            )
+            write_fixture(
+                run_metadata,
+                json.dumps(
+                    {
+                        "schema_version": "v1",
+                        "epic_key": "RPVINF-134",
+                        "group_id": "embedded_pi_session_adapter",
+                        "harness": "pi",
+                        "runtime_mode": "embedded",
+                        "status": "running",
+                        "phase": "planning",
+                        "completion_state": "in_progress",
+                        "runtime": {},
+                        "embedded_session": {
+                            "state": "unavailable",
+                            "session_id": None,
+                            "capabilities": {"available": False, "reason": "fallback"},
+                            "events": [],
+                            "fallback_reason": "fallback",
+                        },
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+
+            result = self.run_script(
+                SLICE_STATUS,
+                "RPVINF-134",
+                "embedded_pi_session_adapter",
+                "--repo-root",
+                str(root),
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual("embedded", payload["runtime_mode"])
+            self.assertEqual("unavailable", payload["embedded_session"]["state"])
+
     def test_migrate_pm_dawn_layout_dry_run_reports_canonical_follow_up_commands(
         self,
     ) -> None:
@@ -784,6 +892,33 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertTrue(payload["implementation_monitor"]["waitable"])
             self.assertEqual("wait_for_worker", payload["implementation_monitor"]["next_action"])
 
+    def test_launch_slice_session_pi_embedded_dry_run_reports_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            self.write_minimal_slice(root)
+
+            result = self.run_script(
+                LAUNCH_SLICE_SESSION,
+                "RPVINF-134",
+                "embedded_pi_session_adapter",
+                "--repo-root",
+                str(root),
+                "--harness",
+                "pi",
+                "--runtime",
+                "embedded",
+                "--phase",
+                "planning",
+                "--dry-run",
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual("pi", payload["harness"])
+            self.assertEqual("embedded", payload["runtime_mode"])
+            self.assertEqual("unavailable", payload["embedded_session"]["state"])
+            self.assertFalse(payload["embedded_session"]["capabilities"]["available"])
+            self.assertIn("fall back", payload["embedded_session"]["fallback_reason"])
+
     def test_sync_slice_session_state_non_opencode_includes_implementation_monitor(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
@@ -811,6 +946,13 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                         "last_action": "worker_marked_pending_review",
                         "worker": {"status": "pending_review"},
                         "runtime": {"session_dir": "/tmp/pi"},
+                        "embedded_session": {
+                            "state": "unavailable",
+                            "session_id": None,
+                            "capabilities": {"available": False, "reason": "fallback"},
+                            "events": [],
+                            "fallback_reason": "fallback",
+                        },
                         "artifacts": {},
                     },
                     indent=2,
@@ -831,6 +973,7 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertEqual("in_progress", payload["completion_state"])
             self.assertTrue(payload["implementation_monitor"]["review_ready"])
             self.assertEqual("review_result", payload["implementation_monitor"]["next_action"])
+            self.assertEqual("unavailable", payload["embedded_session"]["state"])
 
     def test_sync_slice_session_state_does_not_write_result_without_flag_at_review_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1036,6 +1179,54 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertTrue(payload["implementation_monitor"]["review_ready"])
             self.assertEqual(["tmux attach -t opencode-session"], payload["attach_instructions"])
 
+    def test_steer_slice_pi_embedded_reports_revision_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            slice_path = self.write_minimal_slice(root)
+            write_fixture(
+                root
+                / ".pm-dawn"
+                / "epics"
+                / "RPVINF-134"
+                / "ops"
+                / "runs"
+                / "embedded_pi_session_adapter.json",
+                json.dumps(
+                    {
+                        "schema_version": "v1",
+                        "epic_key": "RPVINF-134",
+                        "group_id": "embedded_pi_session_adapter",
+                        "handoff_path": str(slice_path),
+                        "branch_name": "feature/RPVINF-134-embedded-pi-session-adapter",
+                        "harness": "pi",
+                        "runtime_mode": "embedded",
+                        "status": "running",
+                        "phase": "implementing",
+                        "completion_state": "in_progress",
+                        "last_action": "launch",
+                        "attach_instructions": ["tmux attach -t pi-RPVINF-134-embedded"],
+                        "worker": {},
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+
+            result = self.run_script(
+                STEER_SLICE,
+                "RPVINF-134",
+                "embedded_pi_session_adapter",
+                "Please revise the plan response",
+                "--repo-root",
+                str(root),
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual("manual_followup_required", payload["status"])
+            self.assertIn("artifact-driven revision relaunch", payload["reason"])
+            self.assertEqual("unavailable", payload["embedded_session"]["state"])
+            self.assertEqual(["tmux attach -t pi-RPVINF-134-embedded"], payload["attach_instructions"])
+
 
 class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
     def test_opencode_config_path_prefers_env_override(self) -> None:
@@ -1081,6 +1272,24 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
         self.assertIsNone(payload["session_id"])
         self.assertEqual([], payload["events"])
         self.assertIn("CLI/tmux", payload["fallback_reason"])
+
+    def test_pi_embedded_snapshot_payload_copies_events(self) -> None:
+        snapshot = harness_pi_embedded.PiEmbeddedSessionSnapshot(
+            session_id="pi-session-1",
+            state="processing",
+            capabilities=harness_pi_embedded.PiEmbeddedCapabilities(
+                available=True,
+                reason="fixture",
+                supports_events=True,
+            ),
+            events=[{"kind": "TOOL_CALL_END", "output": "full output"}],
+        )
+
+        payload = snapshot.to_payload()
+        payload["events"][0]["output"] = "mutated"
+
+        self.assertEqual("full output", snapshot.events[0]["output"])
+        self.assertTrue(payload["capabilities"]["supports_events"])
 
     def test_tmux_has_session_returns_false_when_tmux_missing(self) -> None:
         with mock.patch.object(
