@@ -1343,16 +1343,45 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
             )
 
     def test_pi_embedded_capabilities_default_to_unavailable(self) -> None:
-        payload = harness_pi_embedded.detect_capabilities(Path("/tmp/repo")).to_payload()
+        with mock.patch.object(harness_pi_embedded.shutil, "which", return_value=None):
+            payload = harness_pi_embedded.detect_capabilities(Path("/tmp/repo")).to_payload()
         self.assertFalse(payload["available"])
         self.assertFalse(payload["supports_events"])
         self.assertFalse(payload["supports_steer"])
         self.assertFalse(payload["supports_follow_up"])
         self.assertIn("fall back", payload["reason"])
 
+    def test_pi_embedded_detects_rpc_protocol_without_enabling_lifecycle(self) -> None:
+        help_text = "\n".join(
+            [
+                "  --mode <mode>                  Output mode: text (default), json, or rpc",
+                "  --continue, -c                 Continue previous session",
+                "  --resume, -r                   Select a session to resume",
+                "  --session <path>               Use specific session file",
+                "  --session-dir <dir>            Directory for session storage and lookup",
+            ]
+        )
+        completed = subprocess.CompletedProcess(["pi", "--help"], 0, help_text, "")
+        with mock.patch.object(harness_pi_embedded.shutil, "which", return_value="/usr/local/bin/pi"):
+            with mock.patch.object(harness_pi_embedded.subprocess, "run", return_value=completed):
+                payload = harness_pi_embedded.detect_capabilities(Path("/tmp/repo")).to_payload()
+
+        self.assertFalse(payload["available"])
+        self.assertEqual("pi-rpc-jsonl", payload["protocol"])
+        self.assertEqual("/usr/local/bin/pi", payload["cli_path"])
+        self.assertTrue(payload["cli_supports_rpc"])
+        self.assertTrue(payload["supports_events"])
+        self.assertTrue(payload["supports_steer"])
+        self.assertTrue(payload["supports_follow_up"])
+        self.assertTrue(payload["supports_persistent_session"])
+        self.assertTrue(payload["supports_session_switch"])
+        self.assertTrue(payload["supports_session_stats"])
+        self.assertIn("lifecycle wiring", payload["reason"])
+
     def test_pi_embedded_adapter_reports_fallback_snapshot(self) -> None:
-        adapter = harness_pi_embedded.PiEmbeddedSessionAdapter(root=Path("/tmp/repo"))
-        payload = adapter.create().to_payload()
+        with mock.patch.object(harness_pi_embedded.shutil, "which", return_value=None):
+            adapter = harness_pi_embedded.PiEmbeddedSessionAdapter(root=Path("/tmp/repo"))
+            payload = adapter.create().to_payload()
         self.assertEqual("unavailable", payload["state"])
         self.assertIsNone(payload["session_id"])
         self.assertEqual([], payload["events"])
