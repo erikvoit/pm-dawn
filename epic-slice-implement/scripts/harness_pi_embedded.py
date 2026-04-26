@@ -96,6 +96,7 @@ class PiEmbeddedSessionAdapter:
         if existing and existing.state not in {"closed", "failed"} and _process_alive(existing.process_id):
             return existing
 
+        _control_path(self.session_dir).unlink(missing_ok=True)
         process = _start_runner(
             root=self.root,
             session_dir=self.session_dir,
@@ -145,7 +146,7 @@ class PiEmbeddedSessionAdapter:
                 protocol=capabilities.protocol,
                 fallback_reason="embedded Pi session metadata was not found; relaunch the embedded session",
             )
-        if snapshot.process_id and not _process_alive(snapshot.process_id) and snapshot.state == "processing":
+        if snapshot.process_id and not _process_alive(snapshot.process_id) and snapshot.state not in {"closed", "failed"}:
             snapshot = _snapshot_with_event(
                 self.session_dir,
                 fallback=snapshot,
@@ -169,7 +170,7 @@ class PiEmbeddedSessionAdapter:
                 protocol=capabilities.protocol,
                 fallback_reason="embedded Pi steering is not supported; use artifact-driven revision relaunch",
             )
-        snapshot = self.observe()
+        snapshot = self.create()
         if snapshot.state in {"unavailable", "failed", "closed"}:
             return snapshot
         _queue_command(self.session_dir, {"type": "steer", "message": message})
@@ -195,7 +196,7 @@ class PiEmbeddedSessionAdapter:
                 protocol=capabilities.protocol,
                 fallback_reason="embedded Pi follow-up is not supported; use artifact-driven revision relaunch",
             )
-        snapshot = self.observe()
+        snapshot = self.create()
         if snapshot.state in {"unavailable", "failed", "closed"}:
             return snapshot
         _queue_command(self.session_dir, {"type": "follow_up", "message": message})
@@ -651,12 +652,13 @@ def _runner_main() -> None:
         with state_lock:
             current = state_holder["snapshot"]
             assert isinstance(current, PiEmbeddedSessionSnapshot)
+            closed_cleanly = exit_code in {0, -signal.SIGTERM}
             state_holder["snapshot"] = _snapshot_with_event(
                 session_dir,
                 fallback=current,
-                state="closed" if exit_code == 0 else "failed",
+                state="closed" if closed_cleanly else "failed",
                 event={"type": "runner_exit", "exit_code": exit_code},
-                fallback_reason=None if exit_code == 0 else "embedded Pi RPC process exited unexpectedly",
+                fallback_reason=None if closed_cleanly else "embedded Pi RPC process exited unexpectedly",
             )
 
 
@@ -717,9 +719,12 @@ def _send_runner_command(
 def _write_rpc_command(process: subprocess.Popen[str], command: dict[str, object]) -> bool:
     if process.stdin is None:
         return False
-    process.stdin.write(json.dumps(command, sort_keys=True) + "\n")
-    process.stdin.flush()
-    return True
+    try:
+        process.stdin.write(json.dumps(command, sort_keys=True) + "\n")
+        process.stdin.flush()
+        return True
+    except OSError:
+        return False
 
 
 def _handle_rpc_output(

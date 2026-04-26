@@ -1436,6 +1436,119 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
             self.assertEqual("prompt", command["type"])
             self.assertEqual("Plan the packet", command["message"])
 
+    def test_pi_embedded_create_clears_stale_control_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            session_dir = root / ".pm-dawn" / "pi-session"
+            session_dir.mkdir(parents=True)
+            (session_dir / "embedded-control.jsonl").write_text(
+                json.dumps({"type": "prompt", "message": "stale"}) + "\n",
+                encoding="utf-8",
+            )
+            capabilities = harness_pi_embedded.PiEmbeddedCapabilities(
+                available=True,
+                reason="fixture",
+                protocol="pi-rpc-jsonl",
+                cli_path="/usr/local/bin/pi",
+                cli_supports_rpc=True,
+            )
+            process = type("Process", (), {"pid": 12345})()
+
+            with mock.patch.object(
+                harness_pi_embedded,
+                "detect_capabilities",
+                return_value=capabilities,
+            ), mock.patch.object(
+                harness_pi_embedded,
+                "_start_runner",
+                return_value=process,
+            ), mock.patch.object(
+                harness_pi_embedded,
+                "_process_alive",
+                return_value=False,
+            ):
+                adapter = harness_pi_embedded.PiEmbeddedSessionAdapter(root=root, session_dir=session_dir)
+                payload = adapter.create().to_payload()
+
+            self.assertEqual("idle", payload["state"])
+            self.assertFalse((session_dir / "embedded-control.jsonl").exists())
+
+    def test_pi_embedded_observe_marks_dead_idle_runner_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            session_dir = root / ".pm-dawn" / "pi-session"
+            capabilities = harness_pi_embedded.PiEmbeddedCapabilities(
+                available=True,
+                reason="fixture",
+                protocol="pi-rpc-jsonl",
+                cli_path="/usr/local/bin/pi",
+                cli_supports_rpc=True,
+            )
+            harness_pi_embedded._write_snapshot(
+                session_dir,
+                harness_pi_embedded.PiEmbeddedSessionSnapshot(
+                    session_id="pi-session-1",
+                    state="idle",
+                    capabilities=capabilities,
+                    events=[],
+                    session_dir=str(session_dir),
+                    protocol="pi-rpc-jsonl",
+                    process_id=12345,
+                ),
+            )
+
+            with mock.patch.object(
+                harness_pi_embedded,
+                "detect_capabilities",
+                return_value=capabilities,
+            ), mock.patch.object(
+                harness_pi_embedded,
+                "_process_alive",
+                return_value=False,
+            ):
+                adapter = harness_pi_embedded.PiEmbeddedSessionAdapter(root=root, session_dir=session_dir)
+                payload = adapter.observe().to_payload()
+
+            self.assertEqual("failed", payload["state"])
+            self.assertIn("no longer running", payload["fallback_reason"])
+
+    def test_pi_embedded_steer_starts_runner_before_queueing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            session_dir = root / ".pm-dawn" / "pi-session"
+            capabilities = harness_pi_embedded.PiEmbeddedCapabilities(
+                available=True,
+                reason="fixture",
+                protocol="pi-rpc-jsonl",
+                cli_path="/usr/local/bin/pi",
+                cli_supports_rpc=True,
+                supports_steer=True,
+            )
+            process = type("Process", (), {"pid": 12345})()
+
+            with mock.patch.object(
+                harness_pi_embedded,
+                "detect_capabilities",
+                return_value=capabilities,
+            ), mock.patch.object(
+                harness_pi_embedded,
+                "_start_runner",
+                return_value=process,
+            ), mock.patch.object(
+                harness_pi_embedded,
+                "_process_alive",
+                return_value=False,
+            ):
+                adapter = harness_pi_embedded.PiEmbeddedSessionAdapter(root=root, session_dir=session_dir)
+                payload = adapter.steer("continue").to_payload()
+
+            self.assertEqual("processing", payload["state"])
+            commands = [
+                json.loads(line)["type"]
+                for line in (session_dir / "embedded-control.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(["steer"], commands)
+
     def test_pi_embedded_steer_follow_up_and_close_queue_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
@@ -1487,6 +1600,18 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
                 for line in (session_dir / "embedded-control.jsonl").read_text(encoding="utf-8").splitlines()
             ]
             self.assertEqual(["steer", "follow_up", "close"], commands)
+
+    def test_pi_embedded_write_rpc_command_handles_broken_pipe(self) -> None:
+        class BrokenStdin:
+            def write(self, _value: str) -> None:
+                raise BrokenPipeError("closed")
+
+            def flush(self) -> None:
+                raise AssertionError("flush should not run after failed write")
+
+        process = type("Process", (), {"stdin": BrokenStdin()})()
+
+        self.assertFalse(harness_pi_embedded._write_rpc_command(process, {"type": "get_state"}))
 
     def test_pi_embedded_snapshot_payload_copies_events(self) -> None:
         snapshot = harness_pi_embedded.PiEmbeddedSessionSnapshot(
