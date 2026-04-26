@@ -21,6 +21,15 @@ assert COMMON_SPEC is not None and COMMON_SPEC.loader is not None
 implement_common = importlib.util.module_from_spec(COMMON_SPEC)
 COMMON_SPEC.loader.exec_module(implement_common)
 
+PI_EMBEDDED_SPEC = importlib.util.spec_from_file_location(
+    "epic_slice_implement_harness_pi_embedded",
+    SCRIPT_ROOT / "harness_pi_embedded.py",
+)
+assert PI_EMBEDDED_SPEC is not None and PI_EMBEDDED_SPEC.loader is not None
+harness_pi_embedded = importlib.util.module_from_spec(PI_EMBEDDED_SPEC)
+sys.modules[PI_EMBEDDED_SPEC.name] = harness_pi_embedded
+PI_EMBEDDED_SPEC.loader.exec_module(harness_pi_embedded)
+
 SLICE_STATUS = REPO_ROOT / "epic-slice-implement" / "scripts" / "slice_status.py"
 CLEANUP_SLICE_ARTIFACTS = (
     REPO_ROOT / "epic-slice-implement" / "scripts" / "cleanup_slice_artifacts.py"
@@ -1056,6 +1065,22 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
             self.assertEqual(
                 Path("/tmp/pi-models.json"), implement_common.pi_models_config_path()
             )
+
+    def test_pi_embedded_capabilities_default_to_unavailable(self) -> None:
+        payload = harness_pi_embedded.detect_capabilities(Path("/tmp/repo")).to_payload()
+        self.assertFalse(payload["available"])
+        self.assertFalse(payload["supports_events"])
+        self.assertFalse(payload["supports_steer"])
+        self.assertFalse(payload["supports_follow_up"])
+        self.assertIn("fall back", payload["reason"])
+
+    def test_pi_embedded_adapter_reports_fallback_snapshot(self) -> None:
+        adapter = harness_pi_embedded.PiEmbeddedSessionAdapter(root=Path("/tmp/repo"))
+        payload = adapter.create().to_payload()
+        self.assertEqual("unavailable", payload["state"])
+        self.assertIsNone(payload["session_id"])
+        self.assertEqual([], payload["events"])
+        self.assertIn("CLI/tmux", payload["fallback_reason"])
 
     def test_tmux_has_session_returns_false_when_tmux_missing(self) -> None:
         with mock.patch.object(
