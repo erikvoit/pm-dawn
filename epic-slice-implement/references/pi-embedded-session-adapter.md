@@ -1,14 +1,16 @@
 # Pi Embedded Session Adapter Decision
 
-`RPVINF-134` evaluates whether PM Dawn should grow an embedded Pi session adapter.
+`RPVINF-134` evaluated whether PM Dawn should grow an embedded Pi session adapter.
+`RPVINF-136` wires the first working RPC-backed adapter.
 
 Decision: keep the adapter in the PM Dawn repo for now, behind the `epic-slice-implement`
 harness boundary, but do not make embedded Pi sessions the default path yet.
 
-The current implementation is a scaffolded harness contract plus verified Pi RPC
-protocol detection. `--runtime embedded` still records fallback capability payloads
-and keeps the existing Pi CLI/tmux artifact loop as the operational fallback until
-the lifecycle wiring is implemented.
+The current implementation is a harness-boundary adapter around Pi RPC JSONL.
+`--runtime embedded` starts a PM Dawn-owned runner when the local `pi` binary
+advertises `--mode rpc`, records bounded `embedded_session` metadata, and keeps
+the existing Pi CLI/tmux artifact loop as the operational fallback when capability
+checks fail.
 
 ## Design Reference
 
@@ -117,9 +119,9 @@ The packet-01 contract records protocol-level detection separately:
 - `supports_session_switch`: true when a concrete session file can be passed
 - `supports_session_stats`: true for the verified `get_session_stats` command
 
-Until lifecycle wiring lands, PM Dawn may detect `pi-rpc-jsonl` and still return
-`available=false` with a fallback reason explaining that the protocol is detected
-but the embedded adapter is not wired yet.
+When these flags are true and `available=true`, PM Dawn can attempt the embedded
+runtime. A later command may still report `failed` if the local runner process is
+stale, the state file is missing, or the external Pi RPC process exits.
 
 ## Session Metadata Contract
 
@@ -144,19 +146,19 @@ payloads in `.pm-dawn` run metadata.
 
 ## Current Viability
 
-Embedded Pi protocol viability is proven enough to target `pi --mode rpc` as the
-next implementation path. Full PM Dawn lifecycle viability is not wired yet. The
-harness module therefore detects RPC support but still reports `available=false`
-until create/submit/observe/close behavior is implemented.
+Embedded Pi protocol viability is proven enough to use `pi --mode rpc` as the
+implementation path. The harness module reports `available=true` when the local
+CLI advertises RPC support and session storage flags.
 
-`launch_slice_session.py --harness pi --runtime embedded` records the current
-snapshot in `embedded_session` metadata and falls back to the current Pi CLI/tmux
-artifact loop instead of attempting a partially wired embedded launch.
+`launch_slice_session.py --harness pi --runtime embedded` starts a PM Dawn-owned
+runner process, queues the launch prompt to Pi RPC, records the snapshot in
+`embedded_session` metadata, and returns status instructions for the embedded
+event stream. If capability checks fail or the runner cannot start, PM Dawn
+records fallback metadata and uses the current Pi CLI/tmux artifact loop.
 
-The next implementation step should wire an opt-in embedded path around the
-subprocess RPC protocol. If that path proves insufficient and a helper requires
-Node or TypeScript, it must remain a harness-owned optional implementation detail
-and must not become a plain-script PM Dawn core dependency.
+If the subprocess RPC path proves insufficient later and a helper requires Node
+or TypeScript, it must remain a harness-owned optional implementation detail and
+must not become a plain-script PM Dawn core dependency.
 
 ## Fallback Rules
 
@@ -165,10 +167,11 @@ and must not become a plain-script PM Dawn core dependency.
   silent success.
 - `slice_status.py` and `sync_slice_session_state.py` surface `embedded_session`
   metadata when run metadata includes it.
-- `steer_slice.py` reports artifact-driven revision guidance for Pi embedded runs
-  until same-session steering is verified.
-- Same-session steering is allowed only when the verified embedded surface supports
-  it; otherwise PM Dawn keeps artifact-driven revision relaunch behavior.
+- `steer_slice.py` uses RPC `steer` when run metadata points at an available,
+  healthy embedded session.
+- Same-session steering is allowed only when the embedded snapshot reports
+  available capability; otherwise PM Dawn keeps artifact-driven revision relaunch
+  behavior.
 - Full event/output data should be available to PM Dawn monitoring when embedded
   mode exists, even if model-facing content is truncated or summarized.
 - RPC protocol incompatibility must be reported as a capability/fallback payload,

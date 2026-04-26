@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
+import json
 import os
 import shutil
+import signal
 import subprocess
+import sys
+import threading
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 
 PiEmbeddedSessionState = Literal[
@@ -54,10 +61,25 @@ class PiEmbeddedSessionSnapshot:
 
 
 class PiEmbeddedSessionAdapter:
-    """Harness-boundary facade for a future Pi embedded session integration."""
+    """Harness-boundary facade for Pi RPC JSONL sessions."""
 
-    def __init__(self, *, root: Path) -> None:
+    def __init__(
+        self,
+        *,
+        root: Path,
+        session_dir: Path | None = None,
+        model: str | None = None,
+        title: str | None = None,
+        session_snapshot: dict[str, object] | None = None,
+    ) -> None:
         self.root = root
+        self.session_dir = Path(
+            session_dir
+            or _string_value(session_snapshot, "session_dir")
+            or (root / ".pm-dawn" / "ops" / "pi-embedded")
+        )
+        self.model = model
+        self.title = title
 
     def capabilities(self) -> PiEmbeddedCapabilities:
         return detect_capabilities(self.root)
@@ -66,23 +88,71 @@ class PiEmbeddedSessionAdapter:
         capabilities = self.capabilities()
         if not capabilities.available:
             return unavailable_snapshot(capabilities)
-        raise NotImplementedError("embedded Pi sessions are not wired yet")
+        self.session_dir.mkdir(parents=True, exist_ok=True)
+        existing = _snapshot_from_state(self.session_dir, capabilities=capabilities)
+        if existing and existing.state not in {"closed", "failed"} and _process_alive(existing.process_id):
+            return existing
+
+        process = _start_runner(
+            root=self.root,
+            session_dir=self.session_dir,
+            model=self.model,
+            title=self.title,
+            capabilities=capabilities,
+        )
+        snapshot = PiEmbeddedSessionSnapshot(
+            session_id=None,
+            state="idle",
+            capabilities=capabilities,
+            events=[{"type": "runner_start", "process_id": process.pid}],
+            session_dir=str(self.session_dir),
+            protocol=capabilities.protocol,
+            process_id=process.pid,
+        )
+        _write_snapshot(self.session_dir, snapshot)
+        return snapshot
 
     def submit(self, prompt: str) -> PiEmbeddedSessionSnapshot:
-        _ = prompt
         capabilities = self.capabilities()
         if not capabilities.available:
             return unavailable_snapshot(capabilities)
-        raise NotImplementedError("embedded Pi submit is not wired yet")
+        snapshot = self.create()
+        if snapshot.state == "unavailable":
+            return snapshot
+        _queue_command(self.session_dir, {"type": "prompt", "message": prompt})
+        return _snapshot_with_event(
+            self.session_dir,
+            fallback=snapshot,
+            state="processing",
+            event={"type": "prompt_queued"},
+        )
 
     def observe(self) -> PiEmbeddedSessionSnapshot:
         capabilities = self.capabilities()
         if not capabilities.available:
             return unavailable_snapshot(capabilities)
-        raise NotImplementedError("embedded Pi observation is not wired yet")
+        snapshot = _snapshot_from_state(self.session_dir, capabilities=capabilities)
+        if snapshot is None:
+            return PiEmbeddedSessionSnapshot(
+                session_id=None,
+                state="failed",
+                capabilities=capabilities,
+                events=[],
+                session_dir=str(self.session_dir),
+                protocol=capabilities.protocol,
+                fallback_reason="embedded Pi session metadata was not found; relaunch the embedded session",
+            )
+        if snapshot.process_id and not _process_alive(snapshot.process_id) and snapshot.state == "processing":
+            snapshot = _snapshot_with_event(
+                self.session_dir,
+                fallback=snapshot,
+                state="failed",
+                event={"type": "runner_missing", "process_id": snapshot.process_id},
+                fallback_reason="embedded Pi runner process is no longer running",
+            )
+        return snapshot
 
     def steer(self, message: str) -> PiEmbeddedSessionSnapshot:
-        _ = message
         capabilities = self.capabilities()
         if not capabilities.available:
             return unavailable_snapshot(capabilities)
@@ -92,12 +162,22 @@ class PiEmbeddedSessionAdapter:
                 state="unavailable",
                 capabilities=capabilities,
                 events=[],
+                session_dir=str(self.session_dir),
+                protocol=capabilities.protocol,
                 fallback_reason="embedded Pi steering is not supported; use artifact-driven revision relaunch",
             )
-        raise NotImplementedError("embedded Pi steering is not wired yet")
+        snapshot = self.observe()
+        if snapshot.state in {"unavailable", "failed", "closed"}:
+            return snapshot
+        _queue_command(self.session_dir, {"type": "steer", "message": message})
+        return _snapshot_with_event(
+            self.session_dir,
+            fallback=snapshot,
+            state="processing",
+            event={"type": "steer_queued"},
+        )
 
     def follow_up(self, message: str) -> PiEmbeddedSessionSnapshot:
-        _ = message
         capabilities = self.capabilities()
         if not capabilities.available:
             return unavailable_snapshot(capabilities)
@@ -107,15 +187,40 @@ class PiEmbeddedSessionAdapter:
                 state="unavailable",
                 capabilities=capabilities,
                 events=[],
+                session_dir=str(self.session_dir),
+                protocol=capabilities.protocol,
                 fallback_reason="embedded Pi follow-up is not supported; use artifact-driven revision relaunch",
             )
-        raise NotImplementedError("embedded Pi follow-up is not wired yet")
+        snapshot = self.observe()
+        if snapshot.state in {"unavailable", "failed", "closed"}:
+            return snapshot
+        _queue_command(self.session_dir, {"type": "follow_up", "message": message})
+        return _snapshot_with_event(
+            self.session_dir,
+            fallback=snapshot,
+            state="awaiting_input",
+            event={"type": "follow_up_queued"},
+        )
 
     def close(self) -> PiEmbeddedSessionSnapshot:
         capabilities = self.capabilities()
         if not capabilities.available:
             return unavailable_snapshot(capabilities)
-        raise NotImplementedError("embedded Pi close is not wired yet")
+        snapshot = self.observe()
+        if snapshot.state in {"failed", "closed", "unavailable"}:
+            return snapshot
+        _queue_command(self.session_dir, {"type": "close"})
+        if snapshot.process_id and _process_alive(snapshot.process_id):
+            try:
+                os.kill(snapshot.process_id, signal.SIGTERM)
+            except OSError:
+                pass
+        return _snapshot_with_event(
+            self.session_dir,
+            fallback=snapshot,
+            state="closed",
+            event={"type": "close_queued"},
+        )
 
 
 def detect_capabilities(root: Path) -> PiEmbeddedCapabilities:
@@ -147,12 +252,8 @@ def detect_capabilities(root: Path) -> PiEmbeddedCapabilities:
         )
 
     return PiEmbeddedCapabilities(
-        available=False,
-        reason=(
-            "Pi RPC JSONL session surface is detected, but PM Dawn embedded lifecycle wiring "
-            "is not implemented yet; "
-            "fall back to the existing Pi CLI/tmux artifact loop"
-        ),
+        available=True,
+        reason="Pi RPC JSONL session surface is available",
         protocol="pi-rpc-jsonl",
         cli_path=cli_path,
         cli_supports_rpc=True,
@@ -194,3 +295,386 @@ def _pi_help_text(cli_path: str) -> str | None:
     if result.returncode != 0:
         return None
     return f"{result.stdout}\n{result.stderr}"
+
+
+def _state_path(session_dir: Path) -> Path:
+    return session_dir / "embedded-state.json"
+
+
+def _control_path(session_dir: Path) -> Path:
+    return session_dir / "embedded-control.jsonl"
+
+
+def _events_path(session_dir: Path) -> Path:
+    return session_dir / "embedded-events.jsonl"
+
+
+def _runner_log_path(session_dir: Path) -> Path:
+    return session_dir / "embedded-runner.log"
+
+
+def _string_value(payload: dict[str, object] | None, key: str) -> str | None:
+    if not payload:
+        return None
+    value = payload.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _process_alive(pid: int | None) -> bool:
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _start_runner(
+    *,
+    root: Path,
+    session_dir: Path,
+    model: str | None,
+    title: str | None,
+    capabilities: PiEmbeddedCapabilities,
+) -> subprocess.Popen[bytes]:
+    args = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "runner",
+        "--root",
+        str(root),
+        "--session-dir",
+        str(session_dir),
+    ]
+    if model:
+        args += ["--model", model]
+    if title:
+        args += ["--title", title]
+    env = os.environ.copy()
+    env.setdefault("PI_OFFLINE", "0")
+    log = _runner_log_path(session_dir).open("ab")
+    try:
+        return subprocess.Popen(
+            args,
+            cwd=str(root),
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            env=env,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        snapshot = PiEmbeddedSessionSnapshot(
+            session_id=None,
+            state="failed",
+            capabilities=capabilities,
+            events=[{"type": "runner_start_failed", "error": str(exc)}],
+            session_dir=str(session_dir),
+            protocol=capabilities.protocol,
+            fallback_reason=f"embedded Pi runner could not be started: {exc}",
+        )
+        _write_snapshot(session_dir, snapshot)
+        raise
+
+
+def _queue_command(session_dir: Path, command: dict[str, object]) -> None:
+    session_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"id": f"pm-dawn-{uuid4().hex}", **command, "queued_at": time.time()}
+    with _control_path(session_dir).open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
+def _snapshot_from_state(
+    session_dir: Path,
+    *,
+    capabilities: PiEmbeddedCapabilities,
+) -> PiEmbeddedSessionSnapshot | None:
+    path = _state_path(session_dir)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return PiEmbeddedSessionSnapshot(
+            session_id=None,
+            state="failed",
+            capabilities=capabilities,
+            events=[],
+            session_dir=str(session_dir),
+            protocol=capabilities.protocol,
+            fallback_reason="embedded Pi session state could not be decoded",
+        )
+    return _snapshot_from_payload(payload, capabilities=capabilities)
+
+
+def _snapshot_from_payload(
+    payload: dict[str, object],
+    *,
+    capabilities: PiEmbeddedCapabilities,
+) -> PiEmbeddedSessionSnapshot:
+    state = payload.get("state")
+    if state not in {"unavailable", "idle", "processing", "awaiting_input", "closed", "failed"}:
+        state = "failed"
+    events = payload.get("events")
+    return PiEmbeddedSessionSnapshot(
+        session_id=_string_value(payload, "session_id"),
+        state=state,  # type: ignore[arg-type]
+        capabilities=capabilities,
+        events=events if isinstance(events, list) else [],
+        session_file=_string_value(payload, "session_file"),
+        session_dir=_string_value(payload, "session_dir"),
+        protocol=_string_value(payload, "protocol") or capabilities.protocol,
+        process_id=payload.get("process_id") if isinstance(payload.get("process_id"), int) else None,
+        fallback_reason=_string_value(payload, "fallback_reason"),
+    )
+
+
+def _write_snapshot(session_dir: Path, snapshot: PiEmbeddedSessionSnapshot) -> None:
+    session_dir.mkdir(parents=True, exist_ok=True)
+    _state_path(session_dir).write_text(
+        json.dumps(snapshot.to_payload(), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _read_events(session_dir: Path, limit: int = 20) -> list[dict[str, object]]:
+    path = _events_path(session_dir)
+    if not path.exists():
+        return []
+    events: list[dict[str, object]] = []
+    for line in path.read_text(encoding="utf-8").splitlines()[-limit:]:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    return events
+
+
+def _append_event(session_dir: Path, event: dict[str, object]) -> list[dict[str, object]]:
+    session_dir.mkdir(parents=True, exist_ok=True)
+    with _events_path(session_dir).open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"time": time.time(), **event}, sort_keys=True) + "\n")
+    return _read_events(session_dir)
+
+
+def _snapshot_with_event(
+    session_dir: Path,
+    *,
+    fallback: PiEmbeddedSessionSnapshot,
+    state: PiEmbeddedSessionState,
+    event: dict[str, object],
+    fallback_reason: str | None = None,
+) -> PiEmbeddedSessionSnapshot:
+    events = _append_event(session_dir, event)
+    snapshot = PiEmbeddedSessionSnapshot(
+        session_id=fallback.session_id,
+        state=state,
+        capabilities=fallback.capabilities,
+        events=events,
+        session_file=fallback.session_file,
+        session_dir=fallback.session_dir or str(session_dir),
+        protocol=fallback.protocol,
+        process_id=fallback.process_id,
+        fallback_reason=fallback_reason,
+    )
+    _write_snapshot(session_dir, snapshot)
+    return snapshot
+
+
+def _runner_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run a PM Dawn embedded Pi RPC session worker.")
+    parser.add_argument("command", choices=("runner",))
+    parser.add_argument("--root", required=True)
+    parser.add_argument("--session-dir", required=True)
+    parser.add_argument("--model")
+    parser.add_argument("--title")
+    return parser.parse_args()
+
+
+def _runner_main() -> None:
+    args = _runner_args()
+    root = Path(args.root).resolve()
+    session_dir = Path(args.session_dir).resolve()
+    capabilities = detect_capabilities(root)
+    if not capabilities.available or not capabilities.cli_path:
+        _write_snapshot(session_dir, unavailable_snapshot(capabilities))
+        return
+
+    cmd = [capabilities.cli_path, "--mode", "rpc", "--session-dir", str(session_dir)]
+    if args.model:
+        cmd += ["--model", args.model]
+    process = subprocess.Popen(
+        cmd,
+        cwd=str(root),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    runner_pid = os.getpid()
+    initial = PiEmbeddedSessionSnapshot(
+        session_id=None,
+        state="idle",
+        capabilities=capabilities,
+        events=_append_event(session_dir, {"type": "runner_ready", "process_id": runner_pid}),
+        session_dir=str(session_dir),
+        protocol=capabilities.protocol,
+        process_id=runner_pid,
+    )
+    _write_snapshot(session_dir, initial)
+    if args.title:
+        _write_rpc_command(process, {"type": "set_session_name", "name": args.title})
+    _write_rpc_command(process, {"type": "get_state"})
+
+    def read_stdout() -> None:
+        assert process.stdout is not None
+        for raw_line in process.stdout:
+            line = raw_line.rstrip("\n").rstrip("\r")
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                _append_event(session_dir, {"type": "non_json_stdout", "text": line[-500:]})
+                continue
+            _handle_rpc_output(session_dir, capabilities, payload, runner_pid)
+
+    def read_stderr() -> None:
+        assert process.stderr is not None
+        for raw_line in process.stderr:
+            line = raw_line.strip()
+            if line:
+                _append_event(session_dir, {"type": "stderr", "text": line[-500:]})
+
+    stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+    stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+
+    offset = 0
+    try:
+        while process.poll() is None:
+            control = _control_path(session_dir)
+            if control.exists():
+                lines = control.read_text(encoding="utf-8").splitlines()
+                for line in lines[offset:]:
+                    _send_runner_command(session_dir, process, line)
+                offset = len(lines)
+            time.sleep(0.25)
+    finally:
+        exit_code = process.poll()
+        _snapshot_with_event(
+            session_dir,
+            fallback=_snapshot_from_state(session_dir, capabilities=capabilities) or initial,
+            state="closed" if exit_code == 0 else "failed",
+            event={"type": "runner_exit", "exit_code": exit_code},
+            fallback_reason=None if exit_code == 0 else "embedded Pi RPC process exited unexpectedly",
+        )
+
+
+def _send_runner_command(session_dir: Path, process: subprocess.Popen[str], line: str) -> None:
+    try:
+        command = json.loads(line)
+    except json.JSONDecodeError:
+        _append_event(session_dir, {"type": "bad_control_line"})
+        return
+    command_type = command.get("type")
+    if command_type == "close":
+        process.terminate()
+        return
+    if command_type not in {"prompt", "steer", "follow_up"}:
+        _append_event(session_dir, {"type": "unsupported_control_command", "command": command_type})
+        return
+    rpc_command = {
+        "id": command.get("id"),
+        "type": command_type,
+        "message": command.get("message", ""),
+    }
+    if not _write_rpc_command(process, rpc_command):
+        _append_event(session_dir, {"type": "stdin_unavailable", "command": command_type})
+        return
+    _append_event(session_dir, {"type": f"{command_type}_sent", "id": command.get("id")})
+    _write_rpc_command(process, {"type": "get_state"})
+
+
+def _write_rpc_command(process: subprocess.Popen[str], command: dict[str, object]) -> bool:
+    if process.stdin is None:
+        return False
+    process.stdin.write(json.dumps(command, sort_keys=True) + "\n")
+    process.stdin.flush()
+    return True
+
+
+def _handle_rpc_output(
+    session_dir: Path,
+    capabilities: PiEmbeddedCapabilities,
+    payload: dict[str, object],
+    runner_pid: int,
+) -> None:
+    event_type = payload.get("type")
+    events = _append_event(session_dir, _summarize_rpc_payload(payload))
+    current = _snapshot_from_state(session_dir, capabilities=capabilities)
+    state: PiEmbeddedSessionState = current.state if current else "idle"
+    session_id = current.session_id if current else None
+    session_file = current.session_file if current else None
+    fallback_reason = None
+    if event_type == "agent_start":
+        state = "processing"
+    elif event_type == "agent_end":
+        state = "idle"
+    elif event_type == "queue_update":
+        state = "awaiting_input"
+    elif event_type == "response" and payload.get("success") is False:
+        state = "failed"
+        fallback_reason = str(payload.get("error") or "Pi RPC command failed")
+    if event_type == "response" and payload.get("command") == "get_state" and isinstance(payload.get("data"), dict):
+        data = payload["data"]
+        session_id = _string_value(data, "sessionId") or session_id
+        session_file = _string_value(data, "sessionFile") or session_file
+        if data.get("isStreaming") is True:
+            state = "processing"
+        elif data.get("pendingMessageCount"):
+            state = "awaiting_input"
+        else:
+            state = "idle"
+    snapshot = PiEmbeddedSessionSnapshot(
+        session_id=session_id,
+        state=state,
+        capabilities=capabilities,
+        events=events,
+        session_file=session_file,
+        session_dir=str(session_dir),
+        protocol=capabilities.protocol,
+        process_id=runner_pid,
+        fallback_reason=fallback_reason,
+    )
+    _write_snapshot(session_dir, snapshot)
+
+
+def _summarize_rpc_payload(payload: dict[str, object]) -> dict[str, object]:
+    summary: dict[str, object] = {"type": payload.get("type", "unknown")}
+    for key in ("command", "success", "id"):
+        if key in payload:
+            summary[key] = payload[key]
+    if payload.get("type") in {"agent_start", "agent_end", "turn_start", "turn_end", "message_start", "message_end"}:
+        return summary
+    if payload.get("type") == "message_update":
+        update = payload.get("assistantMessageEvent")
+        if isinstance(update, dict):
+            summary["assistant_event_type"] = update.get("type")
+    if payload.get("type") == "tool_execution_start":
+        summary["tool"] = payload.get("toolName")
+    if payload.get("type") == "tool_execution_end":
+        summary["tool"] = payload.get("toolName")
+    if payload.get("type") == "response" and payload.get("success") is False:
+        summary["error"] = payload.get("error")
+    return summary
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "runner":
+        _runner_main()

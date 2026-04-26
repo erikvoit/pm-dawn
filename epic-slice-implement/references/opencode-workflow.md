@@ -42,10 +42,11 @@ Packet-first execution path:
 **Note for Pi**: For Pi, the default revision loop is artifact-driven. A `changes_requested` turn triggers a fresh bounded revision run that reads the existing `.plan-review.md` and writes a new `.plan-response.md`. It is not equivalent to OpenCode server-mode in-session follow-up steering.
 
 Pi embedded session adapter:
-- `launch_slice_session.py --harness pi --runtime embedded` is an explicit opt-in capability probe path
-- when embedded capability is unavailable, PM Dawn records `embedded_session` metadata and falls back to the existing Pi CLI/tmux artifact loop
-- same-session Pi steering is allowed only after a concrete embedded SDK/session surface is verified
-- until then, Pi steering returns artifact-driven revision guidance rather than claiming a live follow-up was delivered
+- `launch_slice_session.py --harness pi --runtime embedded` is an explicit opt-in RPC session path
+- when Pi advertises `--mode rpc`, PM Dawn starts a harness-owned embedded runner and records `embedded_session` metadata plus bounded event/state files under the Pi session directory
+- when embedded capability is unavailable, PM Dawn records `embedded_session` fallback metadata and falls back to the existing Pi CLI/tmux artifact loop
+- same-session Pi steering uses the embedded adapter's RPC `steer` command when run metadata points at an available embedded session
+- unavailable, stale, or fallback embedded metadata returns artifact-driven revision guidance rather than claiming a live follow-up was delivered
 - embedded session metadata belongs to run/status/sync payloads and must not change `.pm-dawn` plan proposal, review, response, or acceptance artifacts
 
 Fallback runtime is `tmux-run`:
@@ -57,7 +58,7 @@ Steering expectations:
 - `tmux-run` is not treated as reliably steerable; prefer relaunch or server-backed continuation
 - for OpenCode `server` mode: follow-up prompts against the same session are supported
 - for Pi: revision is artifact-driven by default (relaunch with new `.plan-response.md` input), not conversational steering
-- for Pi embedded: missing capability reports an explicit fallback; verified same-session steering remains future/conditional
+- for Pi embedded: same-session steering is supported only while embedded session metadata is available and healthy; missing capability reports an explicit fallback
 - once an implementation run reaches `pending_review`, stop steering and hand off to reviewer/Codex
 
 Completion/result flow:

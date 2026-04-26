@@ -41,4 +41,4 @@ Steer prompts should include:
 - the same handoff path
 - the steering message
 - an instruction to stop and report conflicts instead of guessing
-- for Pi embedded fallback, report that steering was not delivered and point back to artifact-driven revision relaunch
+- for Pi embedded fallback or stale session metadata, report that steering was not delivered and point back to artifact-driven revision relaunch
