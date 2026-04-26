@@ -783,6 +783,27 @@ class TestImplementHelpers(unittest.TestCase):
             self.assertFalse(monitor["waitable"])
             self.assertEqual("inspect_completion", monitor["next_action"])
 
+    def test_implementation_review_monitor_state_preserves_failure_state_without_none_stringification(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            build_repo_fixture(root)
+
+            monitor = implementation_review_monitor_state(
+                root,
+                "RPVINF-124",
+                "consumer_enablement_4",
+                None,
+                status=None,
+                completion_state="failed",
+                worker={},
+                last_action="launch",
+            )
+
+            self.assertEqual("failed", monitor["status"])
+            self.assertEqual("failed", monitor["completion_state"])
+            self.assertFalse(monitor["review_ready"])
+            self.assertEqual("inspect_failure", monitor["next_action"])
+
     def test_build_launch_prompt_includes_reviewed_plan_rules(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
