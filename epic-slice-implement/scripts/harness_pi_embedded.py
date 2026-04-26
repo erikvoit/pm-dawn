@@ -615,52 +615,103 @@ def _runner_main() -> None:
     stdout_thread.start()
     stderr_thread.start()
 
-    offset = 0
+    control_position = 0
+    control_remainder = ""
     try:
         while process.poll() is None:
             control = _control_path(session_dir)
             if control.exists():
-                lines = control.read_text(encoding="utf-8").splitlines()
-                for line in lines[offset:]:
-                    _send_runner_command(session_dir, process, line)
-                offset = len(lines)
+                with control.open(encoding="utf-8") as handle:
+                    handle.seek(control_position)
+                    chunk = handle.read()
+                    control_position = handle.tell()
+                if chunk:
+                    text = f"{control_remainder}{chunk}"
+                    lines = text.splitlines()
+                    if text.endswith("\n"):
+                        control_remainder = ""
+                    else:
+                        control_remainder = lines.pop() if lines else text
+                    for line in lines:
+                        with state_lock:
+                            current = state_holder["snapshot"]
+                            assert isinstance(current, PiEmbeddedSessionSnapshot)
+                            state_holder["snapshot"] = _send_runner_command(session_dir, process, line, current)
+                            state_holder["last_persisted"] = time.time()
             time.sleep(0.25)
     finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
         exit_code = process.poll()
-        current = state_holder["snapshot"]
-        assert isinstance(current, PiEmbeddedSessionSnapshot)
-        _snapshot_with_event(
-            session_dir,
-            fallback=current,
-            state="closed" if exit_code == 0 else "failed",
-            event={"type": "runner_exit", "exit_code": exit_code},
-            fallback_reason=None if exit_code == 0 else "embedded Pi RPC process exited unexpectedly",
-        )
+        with state_lock:
+            current = state_holder["snapshot"]
+            assert isinstance(current, PiEmbeddedSessionSnapshot)
+            state_holder["snapshot"] = _snapshot_with_event(
+                session_dir,
+                fallback=current,
+                state="closed" if exit_code == 0 else "failed",
+                event={"type": "runner_exit", "exit_code": exit_code},
+                fallback_reason=None if exit_code == 0 else "embedded Pi RPC process exited unexpectedly",
+            )
 
 
-def _send_runner_command(session_dir: Path, process: subprocess.Popen[str], line: str) -> None:
+def _send_runner_command(
+    session_dir: Path,
+    process: subprocess.Popen[str],
+    line: str,
+    current: PiEmbeddedSessionSnapshot,
+) -> PiEmbeddedSessionSnapshot:
     try:
         command = json.loads(line)
     except json.JSONDecodeError:
-        _append_event(session_dir, {"type": "bad_control_line"})
-        return
+        return _snapshot_with_event(
+            session_dir,
+            fallback=current,
+            state=current.state,
+            event={"type": "bad_control_line"},
+        )
     command_type = command.get("type")
     if command_type == "close":
         process.terminate()
-        return
+        return _snapshot_with_event(
+            session_dir,
+            fallback=current,
+            state="closed",
+            event={"type": "close_sent", "id": command.get("id")},
+        )
     if command_type not in {"prompt", "steer", "follow_up"}:
-        _append_event(session_dir, {"type": "unsupported_control_command", "command": command_type})
-        return
+        return _snapshot_with_event(
+            session_dir,
+            fallback=current,
+            state=current.state,
+            event={"type": "unsupported_control_command", "command": command_type},
+        )
     rpc_command = {
         "id": command.get("id"),
         "type": command_type,
         "message": command.get("message", ""),
     }
     if not _write_rpc_command(process, rpc_command):
-        _append_event(session_dir, {"type": "stdin_unavailable", "command": command_type})
-        return
-    _append_event(session_dir, {"type": f"{command_type}_sent", "id": command.get("id")})
+        return _snapshot_with_event(
+            session_dir,
+            fallback=current,
+            state="failed",
+            event={"type": "stdin_unavailable", "command": command_type},
+            fallback_reason="embedded Pi RPC stdin is unavailable",
+        )
+    snapshot = _snapshot_with_event(
+        session_dir,
+        fallback=current,
+        state="processing" if command_type in {"prompt", "steer"} else "awaiting_input",
+        event={"type": f"{command_type}_sent", "id": command.get("id")},
+    )
     _write_rpc_command(process, {"type": "get_state"})
+    return snapshot
 
 
 def _write_rpc_command(process: subprocess.Popen[str], command: dict[str, object]) -> bool:
