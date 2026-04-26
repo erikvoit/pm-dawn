@@ -95,10 +95,8 @@ def main() -> None:
         if implementation_monitor is None:
             return status, completion_state, None
         return (
-            str(implementation_monitor["status"]),
-            str(implementation_monitor["completion_state"])
-            if implementation_monitor["completion_state"] is not None
-            else None,
+            implementation_monitor["status"],
+            implementation_monitor["completion_state"],
             implementation_monitor,
         )
 

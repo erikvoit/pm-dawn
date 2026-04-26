@@ -644,7 +644,7 @@ def implementation_review_monitor_state(
         )
     elif completion_state in {"failed", "timed_out"}:
         snapshot = ImplementationReviewMonitorSnapshot(
-            status=status or str(completion_state),
+            status=status or (str(completion_state) if completion_state is not None else "unknown"),
             completion_state=completion_state,
             review_ready=False,
             waitable=False,
