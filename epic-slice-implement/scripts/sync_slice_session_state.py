@@ -120,6 +120,7 @@ def main() -> None:
             "plan_review": plan_review,
             "plan_monitor": plan_monitor,
             "implementation_monitor": implementation_monitor,
+            "embedded_session": run_meta.get("embedded_session"),
             "warning": "transcript sync is currently only supported for opencode-backed sessions",
         }
         emit_json(payload)
@@ -145,6 +146,7 @@ def main() -> None:
             "plan_review": plan_review,
             "plan_monitor": plan_monitor,
             "implementation_monitor": implementation_monitor,
+            "embedded_session": run_meta.get("embedded_session"),
             "warning": str(exc),
         }
         emit_json(payload)
@@ -208,6 +210,7 @@ def main() -> None:
         "plan_review": plan_review,
         "plan_monitor": plan_monitor,
         "implementation_monitor": implementation_monitor,
+        "embedded_session": updated.get("embedded_session"),
     }
     emit_json(payload)
 

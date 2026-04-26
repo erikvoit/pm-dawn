@@ -16,6 +16,7 @@ from common import (
     emit_json,
     read_json,
 )
+from harness_pi_embedded import PiEmbeddedSessionAdapter
 from pm_dawn_core.layout import run_metadata_path
 from pm_dawn_core.implement import implementation_review_monitor_state
 from pm_dawn_core.markdown import parse_slice_markdown
@@ -71,6 +72,20 @@ def main() -> None:
         )
         return
     prompt = build_steer_prompt(handoff, handoff_path, root, args.steering_message)
+
+    if harness == "pi" and (runtime == "embedded" or run_meta.get("embedded_session")):
+        embedded_snapshot = PiEmbeddedSessionAdapter(root=root).steer(args.steering_message)
+        payload = {
+            "status": "manual_followup_required",
+            "reason": (
+                "embedded Pi steering is unavailable; use the existing artifact-driven revision "
+                "relaunch flow or continue in the Pi tmux session"
+            ),
+            "embedded_session": embedded_snapshot.to_payload(),
+            "attach_instructions": run_meta.get("attach_instructions", []),
+        }
+        emit_json(payload)
+        return
 
     if harness != "opencode" or runtime == "tmux-run":
         payload = {

@@ -35,8 +35,10 @@ Packet-plan runs should:
 - be considered failed if the run returns without that artifact existing on disk
 - treat the resulting artifact as review input that Codex or another reviewer can comment on, reject, or accept before implementation launch
 - never imply that a worker-authored proposal is already accepted just because the file exists
+- keep the same artifact contract when launched through Pi embedded-session capability probing or fallback paths
 
 Steer prompts should include:
 - the same handoff path
 - the steering message
 - an instruction to stop and report conflicts instead of guessing
+- for Pi embedded fallback, report that steering was not delivered and point back to artifact-driven revision relaunch

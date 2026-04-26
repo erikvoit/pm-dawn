@@ -330,6 +330,7 @@ Expected environment:
 - repo root available via `--repo-root`
 - `.pm-dawn/project-profile.toml` when repo-local defaults matter
 - harness CLI installed for the chosen runtime (`pi` or `opencode`)
+- Pi embedded sessions are an opt-in probe path via `--runtime embedded`; until a concrete Pi SDK/session surface is verified, PM Dawn records unavailable capability metadata and falls back to the existing Pi CLI/tmux artifact loop
 
 Shared runtime behavior:
 
@@ -353,6 +354,7 @@ Important side effects:
 - PM Dawn writes and updates `.pm-dawn/` artifacts
 - migration and bootstrap flows default to adding `.pm-dawn/` to `.gitignore`
 - launch flows may create tmux sessions and harness runtime state
+- Pi embedded-session probes may add `embedded_session` metadata to run/status/sync payloads without changing `.pm-dawn` proposal/review/response/acceptance artifacts
 - implementation workers may mark `worker.status=pending_review`
 - `pending_review` is not acceptance; reviewer completion remains separate
 - PM Dawn does not require a managed Python runner wrapper today; plain `python` is still the supported execution path for core workflow scripts

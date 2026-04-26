@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--worker-note")
     parser.add_argument("--model-check")
     parser.add_argument("--monitoring")
+    parser.add_argument("--embedded-session")
     return parser.parse_args()
 
 
@@ -74,6 +75,9 @@ def main() -> None:
     monitoring = existing.get("monitoring")
     if args.monitoring:
         monitoring = json.loads(args.monitoring)
+    embedded_session = existing.get("embedded_session")
+    if args.embedded_session:
+        embedded_session = json.loads(args.embedded_session)
     payload = {
         "schema_version": "v1",
         "epic_key": args.epic_key,
@@ -104,6 +108,7 @@ def main() -> None:
         "artifacts": artifacts,
         "worker": worker,
         "monitoring": monitoring,
+        "embedded_session": embedded_session,
     }
     if args.harness == "opencode":
         payload["opencode"] = {

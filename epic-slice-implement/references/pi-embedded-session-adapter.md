@@ -5,9 +5,11 @@
 Decision: keep the adapter in the PM Dawn repo for now, behind the `epic-slice-implement`
 harness boundary, but do not make embedded Pi sessions the default path yet.
 
-The current implementation is a scaffolded harness contract. It makes the desired
-shape explicit and keeps the existing Pi CLI/tmux artifact loop as the operational
-fallback until a concrete Pi SDK/session surface is verified.
+The current implementation is a scaffolded harness contract plus an explicit
+`--runtime embedded` launch/steer/status metadata path. It makes the desired shape
+visible, records fallback capability payloads, and keeps the existing Pi CLI/tmux
+artifact loop as the operational fallback until a concrete Pi SDK/session surface
+is verified.
 
 ## Design Reference
 
@@ -54,6 +56,9 @@ remain responsible for mapping results to these existing artifacts:
 
 Embedded Pi session viability is not proven in this repo yet. The harness module
 therefore reports `available=false` by default and gives a concrete fallback reason.
+`launch_slice_session.py --harness pi --runtime embedded` records that unavailable
+snapshot in `embedded_session` metadata and falls back to the current Pi CLI/tmux
+artifact loop instead of attempting an unverified embedded launch.
 
 The next implementation step may wire an opt-in embedded path only after verifying
 a Pi SDK/session package or helper process that can support the adapter contract.
@@ -65,6 +70,10 @@ implementation detail and must not become a plain-script PM Dawn core dependency
 - Default Pi behavior remains the existing CLI/tmux path in `harness_pi.py`.
 - Missing embedded capability must produce an explicit fallback payload, not a
   silent success.
+- `slice_status.py` and `sync_slice_session_state.py` surface `embedded_session`
+  metadata when run metadata includes it.
+- `steer_slice.py` reports artifact-driven revision guidance for Pi embedded runs
+  until same-session steering is verified.
 - Same-session steering is allowed only when the verified embedded surface supports
   it; otherwise PM Dawn keeps artifact-driven revision relaunch behavior.
 - Full event/output data should be available to PM Dawn monitoring when embedded

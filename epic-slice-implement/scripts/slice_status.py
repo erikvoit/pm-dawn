@@ -120,6 +120,7 @@ def main() -> None:
         "last_action": data.get("last_action"),
         "artifacts": data.get("artifacts", {}),
         "worker": data.get("worker", {}),
+        "embedded_session": data.get("embedded_session"),
         "last_completed_at": last_completed_at,
     }
     emit_json(payload)

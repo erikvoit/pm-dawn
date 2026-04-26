@@ -34,6 +34,7 @@ from common import (
     slice_title,
     tmux_has_session,
 )
+from harness_pi_embedded import PiEmbeddedSessionAdapter
 from pm_dawn_core.implement import (
     build_launch_prompt,
     harness_monitoring_settings,
@@ -54,7 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("group_id")
     parser.add_argument("--packet-id")
     parser.add_argument("--repo-root", default=".")
-    parser.add_argument("--runtime", choices=("server", "tmux-run"), default="server")
+    parser.add_argument("--runtime", choices=("server", "tmux-run", "embedded"), default="server")
     parser.add_argument("--phase", choices=("planning", "implementing"), default="implementing")
     parser.add_argument("--approved-plan")
     parser.add_argument("--harness")
@@ -95,6 +96,8 @@ def record_run(args: argparse.Namespace, handoff: dict, handoff_path: Path, payl
         cmd += ["--model-check", json.dumps(payload["model_check"], sort_keys=True)]
     if payload.get("monitoring") is not None:
         cmd += ["--monitoring", json.dumps(payload["monitoring"], sort_keys=True)]
+    if payload.get("embedded_session") is not None:
+        cmd += ["--embedded-session", json.dumps(payload["embedded_session"], sort_keys=True)]
     if payload.get("server_url"):
         cmd += ["--server-url", payload["server_url"]]
     if payload.get("opencode_session_id"):
@@ -183,6 +186,7 @@ def main() -> None:
         "title": title,
         "plan_review": review_state if args.packet_id else None,
         "plan_monitor": plan_monitor,
+        "embedded_session": None,
     }
     if approved_plan:
         payload["approved_plan"] = str(approved_plan)
@@ -204,7 +208,11 @@ def main() -> None:
 
     if args.dry_run:
         if harness == "pi":
-            payload["runtime_mode"] = "tmux-run"
+            if args.runtime == "embedded":
+                payload["runtime_mode"] = "embedded"
+                payload["embedded_session"] = PiEmbeddedSessionAdapter(root=root).create().to_payload()
+            else:
+                payload["runtime_mode"] = "tmux-run"
             payload["attach_instructions"] = pi_attach_instructions(None)
         elif args.runtime == "server":
             payload["server_url"] = args.server_url
@@ -237,6 +245,10 @@ def main() -> None:
 
     if harness == "pi":
         require_cli("pi")
+        if args.runtime == "embedded":
+            embedded_snapshot = PiEmbeddedSessionAdapter(root=root).create()
+            payload["embedded_session"] = embedded_snapshot.to_payload()
+            payload["runtime_mode"] = "tmux-run"
         worker_session = pi_slice_tmux_session_name(args.epic_key, args.group_id, args.packet_id)
         session_dir = pi_session_dir(root, args.epic_key, args.group_id, args.packet_id, args.phase)
         session_dir.mkdir(parents=True, exist_ok=True)
