@@ -38,13 +38,7 @@ class PiEmbeddedSessionSnapshot:
     fallback_reason: str | None = None
 
     def to_payload(self) -> dict[str, object]:
-        return {
-            "session_id": self.session_id,
-            "state": self.state,
-            "capabilities": self.capabilities.to_payload(),
-            "events": self.events,
-            "fallback_reason": self.fallback_reason,
-        }
+        return asdict(self)
 
 
 class PiEmbeddedSessionAdapter:
