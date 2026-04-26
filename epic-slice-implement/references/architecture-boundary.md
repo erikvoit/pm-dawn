@@ -33,6 +33,8 @@ That includes:
 
 These behaviors live under `epic-slice-implement/scripts/` and are intentionally allowed to vary by harness as long as they honor the shared PM Dawn protocol-core contract.
 
+`RPVINF-134` adds an explicit decision record and scaffold for a future embedded Pi session adapter. That adapter belongs in this harness boundary, not in `pm_dawn_core`. Its shape may borrow from programmable agent-loop designs such as typed sessions, event observations, steering queues, follow-up queues, and execution-environment isolation, but PM Dawn's core contract remains the `.pm-dawn` artifact protocol and plain-Python runtime policy. Until a concrete Pi SDK/session surface is verified, the existing Pi CLI/tmux artifact loop remains the default operational path.
+
 ### Repo Documentation Layer
 
 The documentation layer explains the protocol core, harness boundary, lifecycle policy, and command surfaces in a way that future contributors and harness authors can follow without re-deriving the architecture from scripts.
