@@ -919,6 +919,84 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
             self.assertFalse(payload["embedded_session"]["capabilities"]["available"])
             self.assertIn("fall back", payload["embedded_session"]["fallback_reason"])
 
+    def test_launch_slice_session_pi_embedded_available_still_uses_tmux_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            self.write_minimal_slice(root)
+            embedded_snapshot = harness_pi_embedded.PiEmbeddedSessionSnapshot(
+                session_id="pi-embedded-1",
+                state="idle",
+                capabilities=harness_pi_embedded.PiEmbeddedCapabilities(
+                    available=True,
+                    reason="fixture",
+                    supports_events=True,
+                    supports_steer=True,
+                ),
+                events=[{"kind": "SESSION_START"}],
+                fallback_reason="embedded runtime is not wired; using tmux fallback",
+            )
+            launch_spec = importlib.util.spec_from_file_location(
+                "epic_slice_launch_embedded_available_test",
+                LAUNCH_SLICE_SESSION,
+            )
+            assert launch_spec is not None and launch_spec.loader is not None
+            launch_module = importlib.util.module_from_spec(launch_spec)
+            original_common = sys.modules.pop("common", None)
+            original_harness = sys.modules.pop("harness_pi_embedded", None)
+            try:
+                with mock.patch.object(sys, "path", [str(SCRIPT_ROOT), *sys.path]):
+                    launch_spec.loader.exec_module(launch_module)
+            finally:
+                sys.modules.pop("common", None)
+                sys.modules.pop("harness_pi_embedded", None)
+                if original_common is not None:
+                    sys.modules["common"] = original_common
+                if original_harness is not None:
+                    sys.modules["harness_pi_embedded"] = original_harness
+
+            with mock.patch.object(
+                launch_module,
+                "parse_args",
+                return_value=type(
+                    "Args",
+                    (),
+                    {
+                        "epic_key": "RPVINF-134",
+                        "group_id": "embedded_pi_session_adapter",
+                        "packet_id": None,
+                        "repo_root": str(root),
+                        "runtime": "embedded",
+                        "phase": "planning",
+                        "approved_plan": None,
+                        "harness": "pi",
+                        "model": "qwen/qwen3-coder-next-q6k",
+                        "server_url": "http://127.0.0.1:4096",
+                        "dry_run": False,
+                    },
+                )(),
+            ), mock.patch.object(
+                launch_module, "require_cli"
+            ), mock.patch.object(
+                launch_module.PiEmbeddedSessionAdapter,
+                "create",
+                return_value=embedded_snapshot,
+            ), mock.patch.object(
+                launch_module, "launch_tmux_session_with_tail"
+            ), mock.patch.object(
+                launch_module, "record_run"
+            ) as record_run, mock.patch.object(
+                launch_module, "emit_json"
+            ) as emit_json:
+                launch_module.main()
+
+            payload = emit_json.call_args.args[0]
+            self.assertEqual("tmux-run", payload["runtime_mode"])
+            self.assertTrue(payload["embedded_session"]["capabilities"]["available"])
+            self.assertEqual("pi-embedded-1", payload["embedded_session"]["session_id"])
+            record_payload = record_run.call_args.args[3]
+            self.assertEqual("tmux-run", record_payload["runtime_mode"])
+            self.assertEqual("pi-embedded-1", record_payload["embedded_session"]["session_id"])
+
     def test_sync_slice_session_state_non_opencode_includes_implementation_monitor(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
@@ -1199,12 +1277,19 @@ class TestEpicSliceImplementLifecycleScripts(unittest.TestCase):
                         "handoff_path": str(slice_path),
                         "branch_name": "feature/RPVINF-134-embedded-pi-session-adapter",
                         "harness": "pi",
-                        "runtime_mode": "embedded",
+                        "runtime_mode": "tmux-run",
                         "status": "running",
                         "phase": "implementing",
                         "completion_state": "in_progress",
                         "last_action": "launch",
                         "attach_instructions": ["tmux attach -t pi-RPVINF-134-embedded"],
+                        "embedded_session": {
+                            "state": "unavailable",
+                            "session_id": None,
+                            "capabilities": {"available": False, "reason": "fallback"},
+                            "events": [],
+                            "fallback_reason": "fallback",
+                        },
                         "worker": {},
                     },
                     indent=2,

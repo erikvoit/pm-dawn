@@ -248,8 +248,6 @@ def main() -> None:
         if args.runtime == "embedded":
             embedded_snapshot = PiEmbeddedSessionAdapter(root=root).create()
             payload["embedded_session"] = embedded_snapshot.to_payload()
-            if embedded_snapshot.capabilities.available:
-                raise SystemExit("embedded Pi runtime is not wired yet; use the Pi CLI/tmux fallback")
             payload["runtime_mode"] = "tmux-run"
         worker_session = pi_slice_tmux_session_name(args.epic_key, args.group_id, args.packet_id)
         session_dir = pi_session_dir(root, args.epic_key, args.group_id, args.packet_id, args.phase)

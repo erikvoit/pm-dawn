@@ -73,7 +73,7 @@ def main() -> None:
         return
     prompt = build_steer_prompt(handoff, handoff_path, root, args.steering_message)
 
-    if harness == "pi" and runtime == "embedded":
+    if harness == "pi" and (runtime == "embedded" or run_meta.get("embedded_session")):
         embedded_snapshot = PiEmbeddedSessionAdapter(root=root).steer(args.steering_message)
         payload = {
             "status": "manual_followup_required",
