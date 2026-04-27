@@ -1,3 +1,13 @@
+from .artifacts import (
+    emit_json,
+    list_lines,
+    normalize_none_list,
+    read_json,
+    read_optional_text,
+    read_text,
+    write_json,
+    write_text,
+)
 from .bootstrap import bootstrap_workspace, starter_project_profile
 from .implement import (
     IMPLEMENT_COMMAND_SURFACES,
@@ -96,6 +106,11 @@ from .runtime import (
     split_provider_model,
     tmux_has_session,
 )
+from .traceability import (
+    issue_key_re,
+    jira_keys_in_text,
+    normalize_branch_candidates,
+)
 
 __all__ = [
     "BASE_PROJECT_PROFILE",
@@ -117,6 +132,7 @@ __all__ = [
     "classify_path_fallback",
     "compile_packet_handoff",
     "compiled_packet_json_path",
+    "emit_json",
     "epic_archive_root",
     "epic_root",
     "epics_root",
@@ -125,13 +141,18 @@ __all__ = [
     "implementation_plan_artifact_path",
     "implementation_review_monitor_state",
     "initialize_packet_plan_review_state",
+    "issue_key_re",
+    "jira_keys_in_text",
     "legacy_opencode_plan_artifact_path",
+    "list_lines",
     "load_execution_input",
     "load_handoff",
     "load_implement_profile",
     "load_project_profile",
     "make_default_profile",
     "merge_profile",
+    "normalize_branch_candidates",
+    "normalize_none_list",
     "ops_root",
     "packet_markdown_path",
     "packet_plan_artifacts",
@@ -151,6 +172,9 @@ __all__ = [
     "pm_dawn_root",
     "pr_root",
     "project_profile_path",
+    "read_json",
+    "read_optional_text",
+    "read_text",
     "render_implement_command",
     "repo_root",
     "resolve_agent_harness",
@@ -187,4 +211,6 @@ __all__ = [
     "starter_project_profile",
     "split_provider_model",
     "tmux_has_session",
+    "write_json",
+    "write_text",
 ]

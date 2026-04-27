@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from pm_dawn_core.artifacts import emit_json, read_json, write_json, write_text
 from pm_dawn_core.implement import (
     build_launch_prompt,
     build_steer_prompt,
@@ -47,27 +48,8 @@ from pm_dawn_core.runtime import (
 )
 
 
-def emit_json(payload: object) -> None:
-    json.dump(payload, sys.stdout, indent=2, sort_keys=True)
-    sys.stdout.write("\n")
-
-
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def read_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def write_json(path: Path, payload: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
 
 
 def sanitize_name(value: str) -> str:

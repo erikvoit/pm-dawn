@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -12,6 +11,14 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from pm_dawn_core.artifacts import (
+    emit_json,
+    normalize_none_list,
+    read_json,
+    read_text,
+    write_json,
+    write_text,
+)
 from pm_dawn_core.markdown import bullet_values, parse_markdown_sections, single_bullet
 from pm_dawn_core.profile import (
     load_project_profile as load_core_project_profile,
@@ -19,6 +26,11 @@ from pm_dawn_core.profile import (
     repo_root,
 )
 from pm_dawn_core.runtime import run_cmd
+from pm_dawn_core.traceability import (
+    issue_key_re,
+    jira_keys_in_text,
+    normalize_branch_candidates,
+)
 
 REQUIRED_HANDOFF_FIELDS = [
     "schema_version",
@@ -55,39 +67,12 @@ class JiraPrPaths:
     handoffs_dir: Path
 
 
-def emit_json(payload: object) -> None:
-    json.dump(payload, sys.stdout, indent=2, sort_keys=True)
-    sys.stdout.write("\n")
-
-
 def load_project_profile(root: Path) -> dict:
     return load_core_project_profile(root, DEFAULT_PROJECT_PROFILE)
 
 
-def issue_key_re(profile: dict) -> re.Pattern[str]:
-    return re.compile(str(profile.get("project", {}).get("issue_key_pattern", r"\b[A-Z][A-Z0-9]+-\d+\b")))
-
-
 def full_suite_command(profile: dict) -> str:
     return str(profile.get("validation", {}).get("full_suite_command", "make check"))
-
-
-def read_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
-def write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
-
-
-def write_json(path: Path, payload: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def jira_pr_paths(root: Path, epic_key: str, group_id: str) -> JiraPrPaths:
@@ -109,20 +94,6 @@ def validate_handoff(data: dict) -> None:
     missing = [field for field in REQUIRED_HANDOFF_FIELDS if field not in data]
     if missing:
         raise RuntimeError(f"slice Markdown missing required fields: {', '.join(missing)}")
-
-
-def normalize_none_list(values: list[str]) -> list[str]:
-    return [] if values == ["None"] else values
-
-
-def normalize_branch_candidates(branch_name: str, profile: dict) -> set[str]:
-    candidates = {branch_name}
-    if profile.get("branches", {}).get("allow_codex_prefix", True):
-        if branch_name.startswith("codex/"):
-            candidates.add(branch_name.removeprefix("codex/"))
-        else:
-            candidates.add(f"codex/{branch_name}")
-    return candidates
 
 
 def parse_packet_markdown(path: Path) -> dict:
@@ -179,10 +150,6 @@ def base_ref(root: Path) -> str:
 def branch_commit_subjects(root: Path, base: str) -> list[str]:
     proc = run_cmd(["git", "log", "--format=%s", f"{base}..HEAD"], cwd=root)
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
-
-
-def jira_keys_in_text(text: str, profile: dict) -> list[str]:
-    return sorted(dict.fromkeys(issue_key_re(profile).findall(text)))
 
 
 def find_existing_pr(root: Path, branch: str, pr_number: int | None = None) -> dict | None:

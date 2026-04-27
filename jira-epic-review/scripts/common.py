@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from pm_dawn_core.artifacts import emit_json, write_json
 from pm_dawn_core.profile import (
     load_project_profile as load_core_project_profile,
     make_default_profile,
@@ -84,11 +85,6 @@ def write_temp_file(content: str) -> Path:
         return Path(handle.name)
 
 
-def emit_json(payload: object) -> None:
-    json.dump(payload, sys.stdout, indent=2, sort_keys=True)
-    sys.stdout.write("\n")
-
-
 def skill_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
@@ -104,8 +100,7 @@ def skill_tmp_path(name: str) -> Path:
 
 
 def write_json_file(path: Path, payload: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(path, payload)
 
 
 def emit_json_and_write_tmp(payload: object, filename: str) -> None:
