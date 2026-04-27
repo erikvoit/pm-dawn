@@ -391,7 +391,7 @@ def _start_runner(
 def _queue_command(session_dir: Path, command: dict[str, object]) -> None:
     session_dir.mkdir(parents=True, exist_ok=True)
     payload = {"id": f"pm-dawn-{uuid4().hex}", **command, "queued_at": time.time()}
-    with _control_path(session_dir).open("a", encoding="utf-8") as handle:
+    with _control_path(session_dir).open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
@@ -534,16 +534,32 @@ def _runner_main() -> None:
     cmd = [capabilities.cli_path, "--mode", "rpc", "--session-dir", str(session_dir)]
     if args.model:
         cmd += ["--model", args.model]
-    process = subprocess.Popen(
-        cmd,
-        cwd=str(root),
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-    )
     runner_pid = os.getpid()
+    try:
+        process = subprocess.Popen(
+            cmd,
+            cwd=str(root),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+    except OSError as exc:
+        _write_snapshot(
+            session_dir,
+            PiEmbeddedSessionSnapshot(
+                session_id=None,
+                state="failed",
+                capabilities=capabilities,
+                events=[{"type": "pi_start_failed", "error": str(exc)}],
+                session_dir=str(session_dir),
+                protocol=capabilities.protocol,
+                process_id=runner_pid,
+                fallback_reason=f"pi CLI could not be started: {exc}",
+            ),
+        )
+        return
     initial = PiEmbeddedSessionSnapshot(
         session_id=None,
         state="idle",
@@ -616,24 +632,23 @@ def _runner_main() -> None:
     stdout_thread.start()
     stderr_thread.start()
 
-    control_position = 0
     control_remainder = ""
+    control_handle = None
     try:
         while process.poll() is None:
-            control = _control_path(session_dir)
-            if control.exists():
-                with control.open(encoding="utf-8") as handle:
-                    handle.seek(control_position)
-                    chunk = handle.read()
-                    control_position = handle.tell()
+            control_path = _control_path(session_dir)
+            if control_handle is None and control_path.exists():
+                control_handle = control_path.open(encoding="utf-8", newline="\n")
+            if control_handle is not None:
+                chunk = control_handle.read()
                 if chunk:
                     text = f"{control_remainder}{chunk}"
-                    lines = text.splitlines()
-                    if text.endswith("\n"):
-                        control_remainder = ""
-                    else:
-                        control_remainder = lines.pop() if lines else text
+                    lines = text.split("\n")
+                    control_remainder = lines.pop()
                     for line in lines:
+                        line = line.strip()
+                        if not line:
+                            continue
                         with state_lock:
                             current = state_holder["snapshot"]
                             assert isinstance(current, PiEmbeddedSessionSnapshot)
@@ -641,6 +656,8 @@ def _runner_main() -> None:
                             state_holder["last_persisted"] = time.time()
             time.sleep(0.25)
     finally:
+        if control_handle is not None:
+            control_handle.close()
         if process.poll() is None:
             process.terminate()
             try:

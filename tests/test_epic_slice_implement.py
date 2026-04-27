@@ -1613,6 +1613,47 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
 
         self.assertFalse(harness_pi_embedded._write_rpc_command(process, {"type": "get_state"}))
 
+    def test_pi_embedded_runner_records_pi_start_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            session_dir = root / ".pm-dawn" / "pi-session"
+            capabilities = harness_pi_embedded.PiEmbeddedCapabilities(
+                available=True,
+                reason="fixture",
+                protocol="pi-rpc-jsonl",
+                cli_path="/usr/local/bin/pi",
+                cli_supports_rpc=True,
+            )
+
+            with mock.patch.object(
+                harness_pi_embedded,
+                "_runner_args",
+                return_value=type(
+                    "Args",
+                    (),
+                    {
+                        "root": str(root),
+                        "session_dir": str(session_dir),
+                        "model": None,
+                        "title": None,
+                    },
+                )(),
+            ), mock.patch.object(
+                harness_pi_embedded,
+                "detect_capabilities",
+                return_value=capabilities,
+            ), mock.patch.object(
+                harness_pi_embedded.subprocess,
+                "Popen",
+                side_effect=OSError("permission denied"),
+            ):
+                harness_pi_embedded._runner_main()
+
+            payload = json.loads((session_dir / "embedded-state.json").read_text(encoding="utf-8"))
+            self.assertEqual("failed", payload["state"])
+            self.assertIn("permission denied", payload["fallback_reason"])
+            self.assertEqual("pi_start_failed", payload["events"][0]["type"])
+
     def test_pi_embedded_snapshot_payload_copies_events(self) -> None:
         snapshot = harness_pi_embedded.PiEmbeddedSessionSnapshot(
             session_id="pi-session-1",
