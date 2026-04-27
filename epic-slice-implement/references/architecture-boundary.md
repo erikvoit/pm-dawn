@@ -20,6 +20,8 @@ That includes:
 
 In practice, this is the seam represented by `pm_dawn_core/` plus the repo-local documents that describe those contracts.
 
+The current inventory of loose skill scripts and their extraction targets is recorded in [script-inventory.md](./script-inventory.md). That inventory is the migration map for `RPVINF-137`: scripts may remain as installed-skill command wrappers, while reusable protocol behavior moves into shared core services.
+
 ### Harness Boundary
 
 The harness boundary owns how a concrete agent runtime launches, attaches, steers, and reports status.
