@@ -27,6 +27,8 @@ PiEmbeddedSessionState = Literal[
 ]
 
 STATE_PERSIST_MIN_INTERVAL_SECONDS = 0.5
+CONTROL_POLL_INTERVAL_SECONDS = 0.1
+EVENT_TAIL_READ_BYTES = 64 * 1024
 
 
 @dataclass(frozen=True)
@@ -93,7 +95,7 @@ class PiEmbeddedSessionAdapter:
             return unavailable_snapshot(capabilities)
         self.session_dir.mkdir(parents=True, exist_ok=True)
         existing = _snapshot_from_state(self.session_dir, capabilities=capabilities)
-        if existing and existing.state not in {"closed", "failed"} and _process_alive(existing.process_id):
+        if existing and existing.state not in {"closed", "failed"} and _runner_process_alive(existing.process_id, self.session_dir):
             return existing
 
         _control_path(self.session_dir).unlink(missing_ok=True)
@@ -146,7 +148,7 @@ class PiEmbeddedSessionAdapter:
                 protocol=capabilities.protocol,
                 fallback_reason="embedded Pi session metadata was not found; relaunch the embedded session",
             )
-        if snapshot.process_id and not _process_alive(snapshot.process_id) and snapshot.state not in {"closed", "failed"}:
+        if snapshot.process_id and not _runner_process_alive(snapshot.process_id, self.session_dir) and snapshot.state not in {"closed", "failed"}:
             snapshot = _snapshot_with_event(
                 self.session_dir,
                 fallback=snapshot,
@@ -216,7 +218,7 @@ class PiEmbeddedSessionAdapter:
         if snapshot.state in {"failed", "closed", "unavailable"}:
             return snapshot
         _queue_command(self.session_dir, {"type": "close"})
-        if snapshot.process_id and _process_alive(snapshot.process_id):
+        if snapshot.process_id and _runner_process_alive(snapshot.process_id, self.session_dir):
             try:
                 os.kill(snapshot.process_id, signal.SIGTERM)
             except OSError:
@@ -332,9 +334,39 @@ def _process_alive(pid: int | None) -> bool:
         return False
     try:
         os.kill(pid, 0)
+    except PermissionError:
+        return True
     except OSError:
         return False
     return True
+
+
+def _runner_process_alive(pid: int | None, session_dir: Path) -> bool:
+    if not _process_alive(pid):
+        return False
+    command = _process_command(pid)
+    if command is None:
+        return True
+    return "harness_pi_embedded.py" in command and "runner" in command and str(session_dir) in command
+
+
+def _process_command(pid: int | None) -> str | None:
+    if not pid:
+        return None
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    command = result.stdout.strip()
+    return command or None
 
 
 def _start_runner(
@@ -456,14 +488,22 @@ def _read_events(session_dir: Path, limit: int = 20) -> list[dict[str, object]]:
     if not path.exists():
         return []
     events: deque[dict[str, object]] = deque(maxlen=limit)
-    with path.open(encoding="utf-8") as handle:
-        for line in handle:
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(event, dict):
-                events.append(event)
+    with path.open("rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        size = handle.tell()
+        handle.seek(max(0, size - EVENT_TAIL_READ_BYTES))
+        data = handle.read()
+    text = data.decode("utf-8", errors="replace")
+    lines = text.split("\n")
+    if len(data) == EVENT_TAIL_READ_BYTES and lines:
+        lines = lines[1:]
+    for line in [item for item in lines if item][-limit:]:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
     return list(events)
 
 
@@ -654,7 +694,7 @@ def _runner_main() -> None:
                             assert isinstance(current, PiEmbeddedSessionSnapshot)
                             state_holder["snapshot"] = _send_runner_command(session_dir, process, line, current)
                             state_holder["last_persisted"] = time.time()
-            time.sleep(0.25)
+            time.sleep(CONTROL_POLL_INTERVAL_SECONDS)
     finally:
         if control_handle is not None:
             control_handle.close()

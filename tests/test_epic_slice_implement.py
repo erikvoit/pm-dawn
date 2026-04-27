@@ -1613,6 +1613,49 @@ class TestEpicSliceImplementPortabilityHelpers(unittest.TestCase):
 
         self.assertFalse(harness_pi_embedded._write_rpc_command(process, {"type": "get_state"}))
 
+    def test_pi_embedded_process_alive_treats_permission_error_as_alive(self) -> None:
+        with mock.patch.object(
+            harness_pi_embedded.os,
+            "kill",
+            side_effect=PermissionError("not ours"),
+        ):
+            self.assertTrue(harness_pi_embedded._process_alive(12345))
+
+    def test_pi_embedded_runner_process_alive_checks_command_when_available(self) -> None:
+        session_dir = Path("/tmp/pm-dawn-pi-session")
+        completed = subprocess.CompletedProcess(
+            ["ps"],
+            0,
+            f"python harness_pi_embedded.py runner --session-dir {session_dir}\n",
+            "",
+        )
+        with mock.patch.object(harness_pi_embedded.os, "kill"), mock.patch.object(
+            harness_pi_embedded.subprocess,
+            "run",
+            return_value=completed,
+        ):
+            self.assertTrue(harness_pi_embedded._runner_process_alive(12345, session_dir))
+
+        reused = subprocess.CompletedProcess(["ps"], 0, "python other.py\n", "")
+        with mock.patch.object(harness_pi_embedded.os, "kill"), mock.patch.object(
+            harness_pi_embedded.subprocess,
+            "run",
+            return_value=reused,
+        ):
+            self.assertFalse(harness_pi_embedded._runner_process_alive(12345, session_dir))
+
+    def test_pi_embedded_read_events_reads_tail_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_dir = Path(tmpdir)
+            event_path = session_dir / "embedded-events.jsonl"
+            with event_path.open("w", encoding="utf-8") as handle:
+                for index in range(50):
+                    handle.write(json.dumps({"index": index, "payload": "x" * 2000}) + "\n")
+
+            events = harness_pi_embedded._read_events(session_dir, limit=3)
+
+            self.assertEqual([47, 48, 49], [event["index"] for event in events])
+
     def test_pi_embedded_runner_records_pi_start_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir).resolve()
