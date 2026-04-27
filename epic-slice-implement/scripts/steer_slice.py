@@ -14,7 +14,9 @@ from common import (
     attach_instructions,
     build_steer_prompt,
     emit_json,
+    now_iso,
     read_json,
+    write_json,
 )
 from harness_pi_embedded import PiEmbeddedSessionAdapter
 from pm_dawn_core.layout import run_metadata_path
@@ -74,7 +76,52 @@ def main() -> None:
     prompt = build_steer_prompt(handoff, handoff_path, root, args.steering_message)
 
     if harness == "pi" and (runtime == "embedded" or run_meta.get("embedded_session")):
-        embedded_snapshot = PiEmbeddedSessionAdapter(root=root).steer(args.steering_message)
+        embedded_meta = run_meta.get("embedded_session") if isinstance(run_meta.get("embedded_session"), dict) else {}
+        embedded_capabilities = embedded_meta.get("capabilities") if isinstance(embedded_meta, dict) else None
+        if not (
+            runtime == "embedded"
+            and isinstance(embedded_capabilities, dict)
+            and embedded_capabilities.get("available") is True
+        ):
+            payload = {
+                "status": "manual_followup_required",
+                "reason": (
+                    "embedded Pi steering is unavailable; use the existing artifact-driven revision "
+                    "relaunch flow or continue in the Pi tmux session"
+                ),
+                "embedded_session": embedded_meta,
+                "attach_instructions": run_meta.get("attach_instructions", []),
+            }
+            emit_json(payload)
+            return
+        session_dir = None
+        if isinstance(embedded_meta, dict) and isinstance(embedded_meta.get("session_dir"), str):
+            session_dir = Path(embedded_meta["session_dir"])
+        embedded_snapshot = PiEmbeddedSessionAdapter(
+            root=root,
+            session_dir=session_dir,
+            session_snapshot=embedded_meta if isinstance(embedded_meta, dict) else None,
+        ).steer(args.steering_message)
+        updated = {
+            **run_meta,
+            "embedded_session": embedded_snapshot.to_payload(),
+            "status": "steered" if embedded_snapshot.state not in {"unavailable", "failed", "closed"} else run_meta.get("status"),
+            "last_action": "steer" if embedded_snapshot.state not in {"unavailable", "failed", "closed"} else run_meta.get("last_action"),
+            "time": {
+                "created": run_meta.get("time", {}).get("created", now_iso()),
+                "updated": now_iso(),
+            },
+        }
+        write_json(run_path, updated)
+        if embedded_snapshot.state not in {"unavailable", "failed", "closed"}:
+            emit_json(
+                {
+                    "status": "steered",
+                    "embedded_session": embedded_snapshot.to_payload(),
+                    "attach_instructions": run_meta.get("attach_instructions", []),
+                }
+            )
+            return
         payload = {
             "status": "manual_followup_required",
             "reason": (

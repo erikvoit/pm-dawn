@@ -49,7 +49,7 @@ Use it only for slice or packet execution and session control. Do not use it for
 - optional `packet_id` when using packet-first execution
 - `repo_root` default `.`
 - `mode`: `launch`, `status`, `steer`, or `prepare`
-- `runtime`: `server` default, `tmux-run` fallback, `embedded` opt-in for Pi capability probing
+- `runtime`: `server` default, `tmux-run` fallback, `embedded` opt-in for Pi RPC sessions
 - `phase`: `planning` or `implementing`
 - optional `approved_plan` for implementation-phase launches
 - optional `steering_message`
@@ -75,7 +75,7 @@ Relevant runtime overrides:
 5. Launch the slice session:
    - `planning`: plan only, no edits or branch switch
    - `implementing`: fresh implementation run from the approved `.plan.md` or reviewer-accepted `.implementation-plan.md`
-   - for Pi, `--runtime embedded` records embedded-session capability metadata and currently falls back to the existing CLI/tmux artifact loop when the embedded SDK/session surface is unavailable
+   - for Pi, `--runtime embedded` uses the embedded RPC session adapter when Pi advertises `--mode rpc`, and records explicit fallback metadata before using the existing CLI/tmux artifact loop when embedded capability is unavailable
    - when `--harness` is omitted, resolve the harness from the repo profile:
      - `agent_harness.phase.<phase>` first
      - then `agent_harness.default`
@@ -110,7 +110,7 @@ Relevant runtime overrides:
 4. Update run metadata.
 5. If the implementation run is already `pending_review`, stop and hand control back to the reviewer instead of sending more steering.
 
-**Note for Pi**: The default Pi path does not support verified in-session follow-up prompts. A `changes_requested` turn in Pi triggers a fresh bounded revision run that reads the existing `.plan-review.md` and writes a new `.plan-response.md`. Revision is artifact/state monitoring, not a durable server attach/steer surface. `--runtime embedded` is an opt-in probe path for a future embedded Pi adapter; when unavailable, steering reports the artifact-driven fallback explicitly.
+**Note for Pi**: The default Pi `tmux-run` path remains artifact-driven. A `changes_requested` turn in that mode triggers a fresh bounded revision run that reads the existing `.plan-review.md` and writes a new `.plan-response.md`. With `--runtime embedded`, PM Dawn uses Pi RPC `steer` when a live embedded session is available; when unavailable, steering reports the artifact-driven fallback explicitly.
 
 ### Sync
 1. Read the run metadata and, when supported by the harness, the live session transcript.
@@ -172,7 +172,7 @@ For `tmux-run`, do not fake reliable live steering. Report the limitation and pr
 - Do not delete active slice artifacts.
 - After merge, only archive or delete the slice-specific files; keep the epic index files unless the entire epic workspace is being retired.
 - Do not describe a managed PM Dawn Python runner as if it already exists; the current contract is plain `python` plus explicit workflow CLI prerequisites.
-- Do not import Pi SDK, Node, TypeScript, or other harness-specific dependencies from `pm_dawn_core`; any future embedded Pi helper must remain harness-owned and optional.
+- Do not import Pi SDK, Node, TypeScript, or other harness-specific dependencies from `pm_dawn_core`; the current embedded Pi adapter uses the `pi` CLI RPC mode from the harness boundary, and any future helper must remain harness-owned and optional.
 
 ## Commands
 Load an execution input:

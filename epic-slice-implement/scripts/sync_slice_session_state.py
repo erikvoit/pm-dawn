@@ -22,6 +22,7 @@ from common import (
     write_json,
     write_text,
 )
+from harness_pi_embedded import PiEmbeddedSessionAdapter
 from pm_dawn_core.layout import run_artifact_path, run_metadata_path
 from pm_dawn_core.implement import (
     implementation_review_monitor_state,
@@ -103,6 +104,63 @@ def main() -> None:
     harness = run_meta.get("harness", "opencode")
     runtime = run_meta.get("runtime", {})
     session_id = runtime.get("session_id") or run_meta.get("opencode", {}).get("session_id")
+    embedded_capabilities = (
+        run_meta["embedded_session"].get("capabilities")
+        if isinstance(run_meta.get("embedded_session"), dict)
+        else None
+    )
+    if (
+        harness == "pi"
+        and run_meta.get("runtime_mode") == "embedded"
+        and isinstance(run_meta.get("embedded_session"), dict)
+        and isinstance(embedded_capabilities, dict)
+        and embedded_capabilities.get("available") is True
+    ):
+        embedded_meta = run_meta["embedded_session"]
+        session_dir = embedded_meta.get("session_dir")
+        observed = PiEmbeddedSessionAdapter(
+            root=root,
+            session_dir=Path(session_dir) if isinstance(session_dir, str) else None,
+            session_snapshot=embedded_meta,
+        ).observe()
+        status, completion_state, implementation_monitor = resolved_status_payload(
+            phase=run_meta.get("phase"),
+            status=(
+                "running"
+                if observed.state == "processing"
+                else "failed"
+                if observed.state == "failed"
+                else observed.state
+            ),
+            completion_state="failed" if observed.state == "failed" else run_meta.get("completion_state"),
+        )
+        updated = {
+            **run_meta,
+            "status": status or run_meta.get("status", "unknown"),
+            "completion_state": completion_state,
+            "embedded_session": observed.to_payload(),
+            "time": {
+                "created": run_meta.get("time", {}).get("created", now_iso()),
+                "updated": now_iso(),
+            },
+        }
+        write_json(path, updated)
+        emit_json(
+            {
+                "status": updated["status"],
+                "phase": updated.get("phase"),
+                "completion_state": updated.get("completion_state"),
+                "harness": harness,
+                "session_dir": runtime.get("session_dir"),
+                "artifacts": updated.get("artifacts", {}),
+                "worker": updated.get("worker", {}),
+                "plan_review": plan_review,
+                "plan_monitor": plan_monitor,
+                "implementation_monitor": implementation_monitor,
+                "embedded_session": updated.get("embedded_session"),
+            }
+        )
+        return
     if harness != "opencode":
         status, completion_state, implementation_monitor = resolved_status_payload(
             phase=run_meta.get("phase"),

@@ -18,6 +18,7 @@ from common import (
     session_completion_state,
     session_runtime_status,
 )
+from harness_pi_embedded import PiEmbeddedSessionAdapter
 from pm_dawn_core.layout import run_metadata_path
 from pm_dawn_core.implement import (
     implementation_review_monitor_state,
@@ -79,6 +80,31 @@ def main() -> None:
     else:
         status = data.get("status", "stopped")
 
+    embedded_session = data.get("embedded_session")
+    embedded_capabilities = embedded_session.get("capabilities") if isinstance(embedded_session, dict) else None
+    if (
+        harness == "pi"
+        and isinstance(embedded_session, dict)
+        and isinstance(embedded_capabilities, dict)
+        and embedded_capabilities.get("available") is True
+        and data.get("runtime_mode") == "embedded"
+    ):
+        session_dir = embedded_session.get("session_dir")
+        observed = PiEmbeddedSessionAdapter(
+            root=root,
+            session_dir=Path(session_dir) if isinstance(session_dir, str) else None,
+            session_snapshot=embedded_session,
+        ).observe()
+        embedded_session = observed.to_payload()
+        if observed.state == "processing":
+            status = "running"
+            completion_state = "in_progress"
+        elif observed.state == "failed":
+            status = "failed"
+            completion_state = "failed"
+        elif observed.state in {"idle", "awaiting_input"} and completion_state in {None, "in_progress"}:
+            status = observed.state
+
     implementation_monitor = (
         implementation_review_monitor_state(
             root,
@@ -120,7 +146,7 @@ def main() -> None:
         "last_action": data.get("last_action"),
         "artifacts": data.get("artifacts", {}),
         "worker": data.get("worker", {}),
-        "embedded_session": data.get("embedded_session"),
+        "embedded_session": embedded_session,
         "last_completed_at": last_completed_at,
     }
     emit_json(payload)

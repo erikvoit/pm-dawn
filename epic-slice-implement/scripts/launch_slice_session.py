@@ -34,7 +34,7 @@ from common import (
     slice_title,
     tmux_has_session,
 )
-from harness_pi_embedded import PiEmbeddedSessionAdapter
+from harness_pi_embedded import PiEmbeddedSessionAdapter, PiEmbeddedSessionSnapshot, unavailable_snapshot
 from pm_dawn_core.implement import (
     build_launch_prompt,
     harness_monitoring_settings,
@@ -210,7 +210,17 @@ def main() -> None:
         if harness == "pi":
             if args.runtime == "embedded":
                 payload["runtime_mode"] = "embedded"
-                payload["embedded_session"] = PiEmbeddedSessionAdapter(root=root).create().to_payload()
+                capabilities = PiEmbeddedSessionAdapter(root=root).capabilities()
+                if capabilities.available:
+                    payload["embedded_session"] = PiEmbeddedSessionSnapshot(
+                        session_id=None,
+                        state="idle",
+                        capabilities=capabilities,
+                        events=[],
+                        protocol=capabilities.protocol,
+                    ).to_payload()
+                else:
+                    payload["embedded_session"] = unavailable_snapshot(capabilities).to_payload()
             else:
                 payload["runtime_mode"] = "tmux-run"
             payload["attach_instructions"] = pi_attach_instructions(None)
@@ -245,13 +255,30 @@ def main() -> None:
 
     if harness == "pi":
         require_cli("pi")
-        if args.runtime == "embedded":
-            embedded_snapshot = PiEmbeddedSessionAdapter(root=root).create()
-            payload["embedded_session"] = embedded_snapshot.to_payload()
-            payload["runtime_mode"] = "tmux-run"
         worker_session = pi_slice_tmux_session_name(args.epic_key, args.group_id, args.packet_id)
         session_dir = pi_session_dir(root, args.epic_key, args.group_id, args.packet_id, args.phase)
         session_dir.mkdir(parents=True, exist_ok=True)
+        if args.runtime == "embedded":
+            adapter = PiEmbeddedSessionAdapter(root=root, session_dir=session_dir, model=model, title=title)
+            try:
+                embedded_snapshot = adapter.submit(prompt)
+            except Exception as exc:  # pragma: no cover - defensive boundary around external CLI startup
+                embedded_snapshot = adapter.observe()
+                if embedded_snapshot.fallback_reason is None:
+                    embedded_snapshot = unavailable_snapshot(adapter.capabilities())
+                payload["embedded_session_error"] = str(exc)
+            payload["embedded_session"] = embedded_snapshot.to_payload()
+            payload["session_dir"] = str(session_dir)
+            if embedded_snapshot.capabilities.available and embedded_snapshot.state not in {"unavailable", "failed"}:
+                payload["runtime_mode"] = "embedded"
+                payload["attach_instructions"] = [
+                    f"tail -f {session_dir / 'embedded-events.jsonl'}",
+                    f"python epic-slice-implement/scripts/slice_status.py {args.epic_key} {args.group_id} --repo-root {root}",
+                ]
+                record_run(args, handoff, handoff_path, payload)
+                emit_json(payload)
+                return
+            payload["runtime_mode"] = "tmux-run"
         cmd = (
             f"cd {shlex.quote(str(root))} && "
             f"pi --print --model {shlex.quote(model)} --session-dir {shlex.quote(str(session_dir))} "
