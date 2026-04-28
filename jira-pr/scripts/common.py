@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 from pm_dawn_core.artifacts import (
     emit_json,
     read_json,
+    read_text,
     write_json,
     write_text,
 )
