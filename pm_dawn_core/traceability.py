@@ -12,7 +12,6 @@ from .markdown import (
     parse_packet_markdown,
     parse_plan_markdown,
     parse_slice_markdown,
-    single_bullet,
 )
 
 

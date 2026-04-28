@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .implement import compile_packet_handoff, load_handoff
+from .implement import compile_packet_handoff as compile_implementation_packet_handoff
+from .implement import load_handoff
 from .layout import slice_paths
 from .markdown import parse_packet_markdown, parse_plan_markdown
 
@@ -40,6 +41,10 @@ REQUIRED_PACKET_FIELDS = {
     "branch_name",
     "commit_scope_guidance",
 }
+
+
+def compile_packet_handoff(root: Path, epic_key: str, group_id: str, packet_id: str) -> tuple[dict, Path]:
+    return compile_implementation_packet_handoff(root, epic_key, group_id, packet_id)
 
 
 def load_slice_handoff_payload(root: Path, epic_key: str, group_id: str) -> dict:
