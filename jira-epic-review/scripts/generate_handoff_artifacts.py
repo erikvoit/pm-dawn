@@ -12,6 +12,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from pm_dawn_core.bootstrap import bootstrap_workspace
+from pm_dawn_core.artifacts import list_lines, write_json, write_text
+from pm_dawn_core.layout import artifacts_root, epic_root
 
 
 def parse_args() -> argparse.Namespace:
@@ -21,22 +23,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--review-json")
     parser.add_argument("--repo-root", default=".")
     return parser.parse_args()
-
-
-def write_json(path: Path, payload: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
-
-
-def list_lines(items: list[str], default: str = "- None") -> str:
-    if not items:
-        return default
-    return "\n".join(f"- {item}" for item in items)
 
 
 def render_group_md(epic_key: str, group: dict) -> str:
@@ -126,9 +112,9 @@ def main() -> None:
     plan = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
     review = json.loads(Path(args.review_json).read_text(encoding="utf-8")) if args.review_json else {}
 
-    epic_root = repo_root / ".pm-dawn" / "epics" / args.epic_key
-    slices_dir = epic_root / "slices"
-    artifacts_dir = epic_root / "ops" / "artifacts"
+    epic_root_path = epic_root(repo_root, args.epic_key)
+    slices_dir = epic_root_path / "slices"
+    artifacts_dir = artifacts_root(repo_root, args.epic_key)
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     manifest = dict(plan.get("epic_handoff_manifest", {}))
@@ -141,7 +127,7 @@ def main() -> None:
 
     handoffs = plan.get("implementation_handoffs", [])
 
-    write_text(epic_root / "index.md", render_index_md(args.epic_key, manifest, handoffs, plan))
+    write_text(epic_root_path / "index.md", render_index_md(args.epic_key, manifest, handoffs, plan))
 
     for handoff in handoffs:
         group_md = render_group_md(args.epic_key, handoff)
@@ -154,9 +140,9 @@ def main() -> None:
 
     output = {
         "epic_key": args.epic_key,
-        "epic_root": str(epic_root),
+        "epic_root": str(epic_root_path),
         "groups": [item["group_id"] for item in handoffs],
-        "files_written": sorted(str(path) for path in epic_root.rglob("*") if path.is_file()),
+        "files_written": sorted(str(path) for path in epic_root_path.rglob("*") if path.is_file()),
     }
     print(json.dumps(output, indent=2, sort_keys=True))
 

@@ -337,9 +337,7 @@ class TestSmokePaths(unittest.TestCase):
 
     def test_validate_slice_plan_exercises_shared_core(self) -> None:
         content = VALIDATE_SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("slice_paths", content)
-        self.assertIn("parse_packet_markdown", content)
-        self.assertIn("parse_plan_markdown", content)
+        self.assertIn("validate_slice_plan_artifacts", content)
 
     def test_compile_packet_markdown_exercises_shared_core(self) -> None:
         content = COMPILE_SCRIPT.read_text(encoding="utf-8")

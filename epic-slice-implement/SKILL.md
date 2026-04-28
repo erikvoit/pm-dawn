@@ -11,6 +11,7 @@ Use this skill to implement one `.pm-dawn` slice handoff with the configured loc
 Architecture summary:
 - protocol-core behavior and command-surface rules come from shared PM Dawn contracts
 - harness-specific launch, attach, and session-management behavior stays at the harness boundary
+- run metadata and review-monitor state are shaped by shared core services, while live session observation and steering stay harness-owned
 - the durable architecture and ACP boundary are documented in [references/architecture-boundary.md](./references/architecture-boundary.md)
 
 Default behavior:

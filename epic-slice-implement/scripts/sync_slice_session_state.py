@@ -24,10 +24,10 @@ from common import (
 )
 from harness_pi_embedded import PiEmbeddedSessionAdapter
 from pm_dawn_core.layout import run_artifact_path, run_metadata_path
-from pm_dawn_core.implement import (
-    implementation_review_monitor_state,
-    packet_plan_monitor_state,
-    resolve_packet_plan_review_state,
+from pm_dawn_core.runs import (
+    apply_implementation_monitor_status,
+    run_plan_monitor_state,
+    run_plan_review_state,
 )
 from pm_dawn_core.profile import repo_root
 
@@ -52,54 +52,8 @@ def main() -> None:
 
     run_meta = read_json(path)
     packet_id = run_meta.get("packet_id")
-    plan_review = (
-        resolve_packet_plan_review_state(root, args.epic_key, packet_id)
-        if isinstance(packet_id, str) and packet_id
-        else None
-    )
-    plan_monitor = (
-        packet_plan_monitor_state(root, args.epic_key, packet_id, state=plan_review)
-        if isinstance(packet_id, str) and packet_id
-        else None
-    )
-
-    def resolve_implementation_monitor(
-        *,
-        phase: str | None,
-        status: str | None,
-        completion_state: str | None,
-    ) -> dict | None:
-        if phase != "implementing":
-            return None
-        return implementation_review_monitor_state(
-            root,
-            args.epic_key,
-            args.group_id,
-            packet_id if isinstance(packet_id, str) else None,
-            status=status,
-            completion_state=completion_state,
-            worker=run_meta.get("worker", {}),
-            last_action=run_meta.get("last_action"),
-        )
-
-    def resolved_status_payload(
-        *,
-        phase: str | None,
-        status: str | None,
-        completion_state: str | None,
-    ) -> tuple[str | None, str | None, dict | None]:
-        implementation_monitor = resolve_implementation_monitor(
-            phase=phase,
-            status=status,
-            completion_state=completion_state,
-        )
-        if implementation_monitor is None:
-            return status, completion_state, None
-        return (
-            implementation_monitor["status"],
-            implementation_monitor["completion_state"],
-            implementation_monitor,
-        )
+    plan_review = run_plan_review_state(root, args.epic_key, packet_id)
+    plan_monitor = run_plan_monitor_state(root, args.epic_key, packet_id, plan_review=plan_review)
 
     harness = run_meta.get("harness", "opencode")
     runtime = run_meta.get("runtime", {})
@@ -123,7 +77,11 @@ def main() -> None:
             session_dir=Path(session_dir) if isinstance(session_dir, str) else None,
             session_snapshot=embedded_meta,
         ).observe()
-        status, completion_state, implementation_monitor = resolved_status_payload(
+        status, completion_state, implementation_monitor = apply_implementation_monitor_status(
+            root,
+            args.epic_key,
+            args.group_id,
+            run_meta,
             phase=run_meta.get("phase"),
             status=(
                 "running"
@@ -162,7 +120,11 @@ def main() -> None:
         )
         return
     if harness != "opencode":
-        status, completion_state, implementation_monitor = resolved_status_payload(
+        status, completion_state, implementation_monitor = apply_implementation_monitor_status(
+            root,
+            args.epic_key,
+            args.group_id,
+            run_meta,
             phase=run_meta.get("phase"),
             status=run_meta.get("status"),
             completion_state=run_meta.get("completion_state"),
@@ -189,7 +151,11 @@ def main() -> None:
     try:
         session_export = export_session_json(session_id)
     except RuntimeError as exc:
-        status, completion_state, implementation_monitor = resolved_status_payload(
+        status, completion_state, implementation_monitor = apply_implementation_monitor_status(
+            root,
+            args.epic_key,
+            args.group_id,
+            run_meta,
             phase=run_meta.get("phase"),
             status=run_meta.get("status"),
             completion_state=run_meta.get("completion_state"),
@@ -213,7 +179,11 @@ def main() -> None:
     completion_state = session_completion_state(session_export)
     status = session_runtime_status(run_meta, completion_state)
     completed_message = latest_completed_assistant_message(session_export, require_text=True)
-    status, completion_state, implementation_monitor = resolved_status_payload(
+    status, completion_state, implementation_monitor = apply_implementation_monitor_status(
+        root,
+        args.epic_key,
+        args.group_id,
+        run_meta,
         phase=phase,
         status=status,
         completion_state=completion_state,

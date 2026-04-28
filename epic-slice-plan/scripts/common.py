@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -10,12 +9,16 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pm_dawn_core.layout import SlicePaths, slice_paths
-from pm_dawn_core.markdown import (
-    bullet_values,
-    parse_markdown_sections,
-    single_bullet,
+from pm_dawn_core.artifacts import (
+    emit_json,
+    list_lines,
+    read_json,
+    read_optional_text,
+    write_json,
+    write_text,
 )
+from pm_dawn_core.layout import SlicePaths, slice_paths
+from pm_dawn_core.markdown import parse_slice_markdown
 from pm_dawn_core.profile import (
     classify_path_fallback,
     load_project_profile as load_core_project_profile,
@@ -123,25 +126,8 @@ DEFAULT_PROJECT_PROFILE: dict = make_default_profile(
 )
 
 
-def emit_json(payload: object) -> None:
-    json.dump(payload, sys.stdout, indent=2, sort_keys=True)
-    sys.stdout.write("\n")
-
-
 def load_project_profile(root: Path) -> dict:
     return load_core_project_profile(root, DEFAULT_PROJECT_PROFILE)
-def read_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def write_json(path: Path, payload: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
 
 
 def validate_handoff(handoff: dict) -> None:
@@ -150,73 +136,11 @@ def validate_handoff(handoff: dict) -> None:
         raise RuntimeError(f"slice handoff missing required fields: {', '.join(missing)}")
 
 
-def parse_slice_markdown(path: Path) -> dict:
-    if not path.exists():
-        raise RuntimeError(f"slice Markdown not found: {path}")
-    markdown = path.read_text(encoding="utf-8")
-    _title, sections = parse_markdown_sections(markdown)
-    inline_values: dict[str, str] = {}
-    for raw_line in markdown.splitlines():
-        line = raw_line.strip()
-        for prefix in ("Group ID:", "Primary Jira Key:", "Secondary Jira Keys:"):
-            if line.startswith(prefix):
-                inline_values[prefix[:-1]] = line.split(":", 1)[1].strip()
-    primary_issue = inline_values.get("Primary Jira Key", single_bullet(sections.get("Primary Jira Key", [])))
-    secondary = inline_values.get("Secondary Jira Keys", single_bullet(sections.get("Secondary Jira Keys", []), "None"))
-    secondary_issues = [] if secondary == "None" else [part.strip() for part in secondary.split(",") if part.strip()]
-    pr_primary = primary_issue
-    pr_additional = list(secondary_issues)
-    for item in bullet_values(sections.get("PR Traceability", [])):
-        if item.startswith("Primary:"):
-            pr_primary = item.split(":", 1)[1].strip()
-        elif item.startswith("Additional:"):
-            extra = item.split(":", 1)[1].strip()
-            pr_additional = [] if extra == "None" else [part.strip() for part in extra.split(",") if part.strip()]
-    source_context = {
-        "epic_review_date": "unknown-date",
-        "implementation_group_reason": "",
-    }
-    for item in bullet_values(sections.get("Source Review Context", [])):
-        if item.startswith("Derived from epic review of "):
-            tail = item.split(" on ", 1)
-            if len(tail) == 2:
-                source_context["epic_review_date"] = tail[1].rstrip(".")
-        else:
-            source_context["implementation_group_reason"] = item
-    return {
-        "schema_version": "v1",
-        "epic_key": path.parent.parent.name,
-        "group_id": inline_values.get("Group ID", path.stem),
-        "primary_issue": primary_issue,
-        "secondary_issues": secondary_issues,
-        "goal": single_bullet(sections.get("Goal", [])),
-        "branch_name": single_bullet(sections.get("Branch Recommendation", [])),
-        "pr_traceability": {
-            "primary_issue": pr_primary or primary_issue,
-            "additional_issues": pr_additional,
-        },
-        "entry_criteria": [] if bullet_values(sections.get("Entry Criteria", [])) == ["None"] else bullet_values(sections.get("Entry Criteria", [])),
-        "exit_criteria": [] if bullet_values(sections.get("Exit Criteria", [])) == ["None"] else bullet_values(sections.get("Exit Criteria", [])),
-        "repo_surfaces": [] if bullet_values(sections.get("Repo Surfaces", [])) == ["None"] else bullet_values(sections.get("Repo Surfaces", [])),
-        "implementation_steps": [] if bullet_values(sections.get("Implementation Steps", [])) == ["None"] else bullet_values(sections.get("Implementation Steps", [])),
-        "validation_steps": [] if bullet_values(sections.get("Validation Steps", [])) == ["None"] else bullet_values(sections.get("Validation Steps", [])),
-        "risks": [] if bullet_values(sections.get("Risks and Constraints", [])) == ["None"] else bullet_values(sections.get("Risks and Constraints", [])),
-        "open_questions": [] if bullet_values(sections.get("Open Questions", [])) == ["None"] else bullet_values(sections.get("Open Questions", [])),
-        "source_context": source_context,
-    }
-
-
 def load_handoff(root: Path, epic_key: str, group_id: str) -> tuple[dict, SlicePaths]:
     paths = slice_paths(root, epic_key, group_id)
     handoff = parse_slice_markdown(paths.slice_md)
     validate_handoff(handoff)
     return handoff, paths
-
-
-def read_optional_text(path: Path) -> str | None:
-    if not path.exists():
-        return None
-    return path.read_text(encoding="utf-8")
 
 
 def tracked_files(root: Path, prefix: str) -> list[str]:
@@ -376,9 +300,3 @@ def feature_slice_requires_non_test_packet(handoff: dict, plan: dict, profile: d
 
 def packet_id(group_id: str, packet_type: str, index: int) -> str:
     return f"{group_id}__{index:02d}_{packet_type}"
-
-
-def list_lines(items: list[str], default: str = "- None") -> str:
-    if not items:
-        return default
-    return "\n".join(f"- {item}" for item in items)
