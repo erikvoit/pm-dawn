@@ -5,8 +5,10 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from pm_dawn_core.artifacts import write_json, write_text
+from pm_dawn_core import plan as plan_core
 from pm_dawn_core.plan import load_slice_handoff_payload, validate_slice_plan_artifacts
 from pm_dawn_core.runs import (
     apply_implementation_monitor_status,
@@ -178,6 +180,26 @@ class TestPlanServices(unittest.TestCase):
             self.assertTrue(payload["ready"])
             self.assertEqual(1, payload["packet_count"])
             self.assertEqual([], payload["errors"])
+
+    def test_validate_slice_plan_artifacts_handles_malformed_packet_without_keyerror(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            write_fixture(root)
+            malformed_packet = {
+                "goal": "Malformed packet",
+                "depends_on": ["missing_dependency"],
+                "files_to_read": [],
+                "files_to_change": [],
+            }
+
+            with mock.patch.object(plan_core, "parse_packet_markdown", return_value=malformed_packet):
+                payload = validate_slice_plan_artifacts(root, "RPVINF-124", "consumer_enablement_11")
+
+            self.assertFalse(payload["ready"])
+            self.assertTrue(any(error.startswith("<unknown>: missing fields") for error in payload["errors"]))
+            self.assertTrue(
+                any("packet ordering in plan Markdown does not match" in error for error in payload["errors"])
+            )
 
 
 class TestRunServices(unittest.TestCase):

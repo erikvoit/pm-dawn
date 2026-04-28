@@ -48,13 +48,13 @@ def compile_packet_handoff(root: Path, epic_key: str, group_id: str, packet_id: 
 
 
 def load_slice_handoff_payload(root: Path, epic_key: str, group_id: str) -> dict:
-    handoff, paths = load_handoff(root, epic_key, group_id)
+    handoff, slice_md_path = load_handoff(root, epic_key, group_id)
     return {
         "repo_root": str(Path(root).resolve()),
-        "slice_markdown_path": str(paths),
+        "slice_markdown_path": str(slice_md_path),
         "handoff": handoff,
         "handoff_markdown_present": True,
-        "handoff_markdown_preview": paths.read_text(encoding="utf-8")[:400],
+        "handoff_markdown_preview": slice_md_path.read_text(encoding="utf-8")[:400],
     }
 
 
@@ -72,15 +72,16 @@ def validate_slice_plan_artifacts(root: Path, epic_key: str, group_id: str) -> d
     if missing_plan:
         raise RuntimeError(f"plan Markdown missing required fields: {', '.join(missing_plan)}")
 
-    packet_ids = {packet["packet_id"] for packet in packets}
+    packet_ids = {packet.get("packet_id") for packet in packets if packet.get("packet_id")}
     errors: list[str] = []
     if not packets:
         errors.append("no packet Markdown artifacts found")
     if not plan.get("files_to_change"):
         errors.append("plan Markdown has no Files Likely to Change entries")
-    if plan.get("packet_order") and plan.get("packet_order") != [packet["packet_id"] for packet in packets]:
+    parsed_packet_order = [packet.get("packet_id") for packet in packets]
+    if plan.get("packet_order") and plan.get("packet_order") != parsed_packet_order:
         errors.append("packet ordering in plan Markdown does not match the packet artifacts on disk")
-    if [packet["packet_id"] for packet in plan.get("packets", [])] != [packet["packet_id"] for packet in packets]:
+    if [packet.get("packet_id") for packet in plan.get("packets", [])] != parsed_packet_order:
         errors.append("packet breakdown in plan Markdown does not match the packet artifacts on disk")
     if not plan.get("goal"):
         errors.append("plan Markdown has an empty Goal section")
@@ -91,12 +92,13 @@ def validate_slice_plan_artifacts(root: Path, epic_key: str, group_id: str) -> d
             continue
         for field in ("packet_id", "packet_type", "goal", "primary_issue", "branch_name", "commit_scope_guidance"):
             if not packet.get(field):
-                errors.append(f"{packet['packet_id'] or '<unknown>'}: empty field {field}")
+                errors.append(f"{packet.get('packet_id') or '<unknown>'}: empty field {field}")
         for dep in packet.get("depends_on", []):
             if dep not in packet_ids:
-                errors.append(f"{packet['packet_id']}: unknown dependency {dep}")
-        if not (paths.packets_dir / f"{packet['packet_id']}.md").exists():
-            errors.append(f"{packet['packet_id']}: missing packet Markdown artifact")
+                errors.append(f"{packet.get('packet_id') or '<unknown>'}: unknown dependency {dep}")
+        packet_id = packet.get("packet_id")
+        if packet_id and not (paths.packets_dir / f"{packet_id}.md").exists():
+            errors.append(f"{packet_id}: missing packet Markdown artifact")
 
     return {
         "epic_key": epic_key,
