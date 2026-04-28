@@ -65,7 +65,7 @@ Environment and config discovery is shared across PM Dawn surfaces. The current 
 ### Install Into Codex Skills
 
 ```bash
-git clone https://github.com/redpinevalley/pm-dawn.git "$CODEX_HOME/skills/pm-dawn"
+git clone https://github.com/erikvoit/pm-dawn.git "$CODEX_HOME/skills/pm-dawn"
 cd "$CODEX_HOME/skills/pm-dawn"
 make check
 ```
@@ -73,7 +73,7 @@ make check
 ### Install Into Claude Skills
 
 ```bash
-git clone https://github.com/redpinevalley/pm-dawn.git "$CLAUDE_HOME/skills/pm-dawn"
+git clone https://github.com/erikvoit/pm-dawn.git "$CLAUDE_HOME/skills/pm-dawn"
 cd "$CLAUDE_HOME/skills/pm-dawn"
 make check
 ```
@@ -312,6 +312,16 @@ Determinism expectations:
 ## ⚙️ Execution Model
 
 PM Dawn is invoked through skill-local Python entrypoints.
+
+The entrypoints are thin compatibility surfaces over shared core services. Current protocol-core services include:
+
+- `pm_dawn_core.artifacts` for repo-local JSON/text artifact IO
+- `pm_dawn_core.layout` for `.pm-dawn` path contracts
+- `pm_dawn_core.markdown` for slice, plan, and packet Markdown parsing
+- `pm_dawn_core.plan` for planning artifact validation and packet handoff compilation
+- `pm_dawn_core.runs` for run metadata shaping and review-monitor state
+- `pm_dawn_core.traceability` for Jira key, PR source, PR body, and branch traceability rules
+- `pm_dawn_core.runtime` for shell resolution, config discovery, CLI prerequisite checks, and provider model sanity checks
 
 Canonical command surface:
 
@@ -586,6 +596,8 @@ Overwrite semantics:
 - update the relevant `SKILL.md` file when behavior changes
 - update the matching `references/*.md` contract doc when boundaries or expectations change
 - keep `README.md` focused on the top-level workflow contract, not script internals
+- keep skill-local scripts as command wrappers when practical, and move reusable protocol behavior into the shared core services listed above
+- keep harness process/session mechanics and external client calls (`pi`, `opencode`, `tmux`, `acli`, `gh`) outside protocol core
 
 ### Test Changes
 

@@ -17,10 +17,22 @@ That includes:
 - project-profile loading and repo-local defaults
 - canonical `epic-slice-implement` command surfaces
 - prompt-building rules that define scope, validation, and review expectations
+- artifact IO and planning validation helpers
+- run metadata and review-monitor state shaping
+- Jira key, PR source, PR body, and branch traceability rules that operate only on local PM Dawn data
 
 In practice, this is the seam represented by `pm_dawn_core/` plus the repo-local documents that describe those contracts.
 
 The current inventory of loose skill scripts and their extraction targets is recorded in [script-inventory.md](./script-inventory.md). That inventory is the migration map for `RPVINF-137`: scripts may remain as installed-skill command wrappers, while reusable protocol behavior moves into shared core services.
+
+Current shared service modules include:
+- `pm_dawn_core.artifacts`
+- `pm_dawn_core.layout`
+- `pm_dawn_core.markdown`
+- `pm_dawn_core.plan`
+- `pm_dawn_core.runs`
+- `pm_dawn_core.traceability`
+- `pm_dawn_core.runtime`
 
 ### Harness Boundary
 
@@ -35,6 +47,8 @@ That includes:
 
 These behaviors live under `epic-slice-implement/scripts/` and are intentionally allowed to vary by harness as long as they honor the shared PM Dawn protocol-core contract.
 
+They must not become imports or hidden dependencies of `pm_dawn_core`.
+
 `RPVINF-134` adds an explicit decision record and scaffold for a future embedded Pi session adapter. That adapter belongs in this harness boundary, not in `pm_dawn_core`. Its shape may borrow from programmable agent-loop designs such as typed sessions, event observations, steering queues, follow-up queues, and execution-environment isolation, but PM Dawn's core contract remains the `.pm-dawn` artifact protocol and plain-Python runtime policy. Until a concrete Pi SDK/session surface is verified, the existing Pi CLI/tmux artifact loop remains the default operational path.
 
 ### Repo Documentation Layer
@@ -42,6 +56,17 @@ These behaviors live under `epic-slice-implement/scripts/` and are intentionally
 The documentation layer explains the protocol core, harness boundary, lifecycle policy, and command surfaces in a way that future contributors and harness authors can follow without re-deriving the architecture from scripts.
 
 This layer matters because PM Dawn is meant to run from an installed skill directory, not only from this development repo.
+
+### External Client Boundary
+
+The external client boundary owns direct interaction with workflow CLIs that talk to outside services.
+
+That includes:
+- Jira graph fetch/apply/verify operations through `acli`
+- GitHub PR lookup, creation, update, and verification through `gh`
+- Git history inspection used by PR readiness checks
+
+PM Dawn core may own local interpretation of artifact shapes, Jira keys, branch names, PR source payloads, and PR body sections. It should not own live Jira or GitHub client sessions.
 
 ## Canonical Command Surface
 

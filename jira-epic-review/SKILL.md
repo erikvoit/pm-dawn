@@ -14,6 +14,8 @@ Repo inspection is enabled by default, but it must be purposeful. Inspect the re
 
 If the repo provides `.pm-dawn/project-profile.toml`, use that profile for branch recommendations and repo-surface hints instead of hardcoded project assumptions.
 
+This skill keeps live Jira work at the ACLI boundary. Shared PM Dawn core services may be used for local `.pm-dawn` artifact paths and Markdown rendering helpers, but `acli` authentication, fetch, apply, and verify operations remain skill-local external client behavior.
+
 ## Preconditions
 - `acli` is installed and authenticated
 - the local ACLI setup is available through the current shell environment
@@ -177,6 +179,8 @@ For normal planning flow, local artifacts are written under `.pm-dawn/epics/<epi
 - `index.md` is the epic-level review summary
 - `slices/<group-id>.md` are the canonical slice definitions
 - `ops/artifacts/` contains raw review or plan snapshots for audit/debug only
+
+The local artifact writes should follow the shared PM Dawn layout and artifact helpers rather than duplicating path or file-IO rules in new scripts.
 
 Behavior by mode:
 - `review` does not mutate Jira; it fetches Jira data, analyzes the graph, optionally inspects the repo, and writes local planning artifacts

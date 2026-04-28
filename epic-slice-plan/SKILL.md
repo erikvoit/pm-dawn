@@ -18,6 +18,7 @@ Default behavior:
 - output: Markdown plan artifacts under `.pm-dawn/epics/<epic-key>/plans/` and Markdown packet artifacts under `.pm-dawn/epics/<epic-key>/packets/`
 - packet JSON is generated only at execution handoff time
 - repo-specific planning heuristics come from `.pm-dawn/project-profile.toml`
+- shared parsing, artifact IO, validation, and packet handoff compilation come from `pm_dawn_core` service modules; scripts in this skill are command wrappers over that contract
 
 Use it between:
 - `$jira-epic-review`
@@ -66,6 +67,7 @@ Use it between:
 - Do not launch coding work. This skill stops at artifacts.
 - Treat Markdown as canonical. Never generate plan or packet JSON during planning.
 - Packet JSON exists only at subagent handoff time.
+- Keep this skill planning-only: do not add harness launch, session management, or PR/Jira client behavior here.
 
 ## Commands
 Load a slice handoff:

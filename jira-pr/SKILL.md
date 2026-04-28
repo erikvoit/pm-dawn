@@ -17,6 +17,8 @@ This skill:
 - opens a PR or patches an existing PR
 - verifies that the live PR body contains every required Jira key
 
+PM Dawn-owned parsing, PR source shaping, title/body rendering, artifact paths, and branch-traceability rules live in shared core traceability services. Git history inspection and `gh` PR operations remain external client boundary behavior in this skill.
+
 This skill does not:
 - mutate Jira issues or transitions
 - implement code
@@ -92,6 +94,7 @@ Preferred source order:
 - Never paste raw logs in the PR body.
 - Summarize validation one line per check.
 - Emit warnings for softer issues, but hard-block missing traceability, missing validation, branch mismatch, or unparseable source input.
+- Do not move live GitHub API or `gh` command execution into `pm_dawn_core`.
 
 ## Commands
 Load and normalize a PR source:
