@@ -78,6 +78,12 @@ from .markdown import (
     parse_slice_markdown,
     single_bullet,
 )
+from .plan import (
+    REQUIRED_PACKET_FIELDS,
+    REQUIRED_PLAN_FIELDS,
+    load_slice_handoff_payload,
+    validate_slice_plan_artifacts,
+)
 from .profile import (
     BASE_PROJECT_PROFILE,
     classify_path_fallback,
@@ -85,6 +91,15 @@ from .profile import (
     make_default_profile,
     merge_profile,
     repo_root,
+)
+from .runs import (
+    apply_implementation_monitor_status,
+    decode_json_arg,
+    load_run_metadata,
+    merge_run_metadata,
+    run_implementation_monitor_state,
+    run_plan_monitor_state,
+    run_plan_review_state,
 )
 from .runtime import (
     check_active_harness_model,
@@ -121,7 +136,10 @@ __all__ = [
     "PACKET_PLAN_WAITABLE_STATUSES",
     "PacketPlanArtifacts",
     "PacketPlanReviewStateSnapshot",
+    "REQUIRED_PACKET_FIELDS",
+    "REQUIRED_PLAN_FIELDS",
     "SlicePaths",
+    "apply_implementation_monitor_status",
     "archive_root",
     "artifacts_root",
     "bootstrap_workspace",
@@ -132,6 +150,7 @@ __all__ = [
     "classify_path_fallback",
     "compile_packet_handoff",
     "compiled_packet_json_path",
+    "decode_json_arg",
     "emit_json",
     "epic_archive_root",
     "epic_root",
@@ -149,8 +168,11 @@ __all__ = [
     "load_handoff",
     "load_implement_profile",
     "load_project_profile",
+    "load_run_metadata",
+    "load_slice_handoff_payload",
     "make_default_profile",
     "merge_profile",
+    "merge_run_metadata",
     "normalize_branch_candidates",
     "normalize_none_list",
     "ops_root",
@@ -186,6 +208,9 @@ __all__ = [
     "run_artifact_path",
     "run_metadata_path",
     "run_cmd",
+    "run_implementation_monitor_state",
+    "run_plan_monitor_state",
+    "run_plan_review_state",
     "runs_root",
     "runtime_home",
     "check_active_harness_model",
@@ -211,6 +236,7 @@ __all__ = [
     "starter_project_profile",
     "split_provider_model",
     "tmux_has_session",
+    "validate_slice_plan_artifacts",
     "write_json",
     "write_text",
 ]

@@ -20,12 +20,12 @@ from common import (
 )
 from harness_pi_embedded import PiEmbeddedSessionAdapter
 from pm_dawn_core.layout import run_metadata_path
-from pm_dawn_core.implement import (
-    implementation_review_monitor_state,
-    packet_plan_monitor_state,
-    resolve_packet_plan_review_state,
-)
 from pm_dawn_core.profile import repo_root
+from pm_dawn_core.runs import (
+    run_implementation_monitor_state,
+    run_plan_monitor_state,
+    run_plan_review_state,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,16 +44,8 @@ def main() -> None:
         raise SystemExit(f"run metadata not found: {path}")
     data = read_json(path)
     packet_id = data.get("packet_id")
-    plan_review = (
-        resolve_packet_plan_review_state(root, args.epic_key, packet_id)
-        if isinstance(packet_id, str) and packet_id
-        else None
-    )
-    plan_monitor = (
-        packet_plan_monitor_state(root, args.epic_key, packet_id, state=plan_review)
-        if isinstance(packet_id, str) and packet_id
-        else None
-    )
+    plan_review = run_plan_review_state(root, args.epic_key, packet_id)
+    plan_monitor = run_plan_monitor_state(root, args.epic_key, packet_id, plan_review=plan_review)
     harness = data.get("harness", "opencode")
     runtime = data.get("runtime", {})
     tmux_session = runtime.get("tmux_session") or data.get("opencode", {}).get("tmux_session")
@@ -105,19 +97,14 @@ def main() -> None:
         elif observed.state in {"idle", "awaiting_input"} and completion_state in {None, "in_progress"}:
             status = observed.state
 
-    implementation_monitor = (
-        implementation_review_monitor_state(
-            root,
-            args.epic_key,
-            args.group_id,
-            packet_id if isinstance(packet_id, str) else None,
-            status=status,
-            completion_state=completion_state,
-            worker=data.get("worker", {}),
-            last_action=data.get("last_action"),
-        )
-        if phase == "implementing"
-        else None
+    implementation_monitor = run_implementation_monitor_state(
+        root,
+        args.epic_key,
+        args.group_id,
+        data,
+        phase=phase,
+        status=status,
+        completion_state=completion_state,
     )
     if implementation_monitor is not None:
         status = implementation_monitor["status"]

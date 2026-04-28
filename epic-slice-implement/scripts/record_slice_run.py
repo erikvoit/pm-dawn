@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ if str(ROOT) not in sys.path:
 from common import emit_json, now_iso, read_json, write_json
 from pm_dawn_core.layout import run_metadata_path
 from pm_dawn_core.profile import repo_root
+from pm_dawn_core.runs import decode_json_arg, merge_run_metadata
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,68 +55,38 @@ def main() -> None:
     created = existing.get("time", {}).get("created", now_iso())
     phase = args.phase or existing.get("phase")
     completion_state = args.completion_state or existing.get("completion_state")
-    artifacts = existing.get("artifacts", {}).copy() if isinstance(existing.get("artifacts"), dict) else {}
-    if args.plan_artifact:
-        artifacts["plan_md"] = str(Path(args.plan_artifact).resolve())
-    if args.implementation_plan_artifact:
-        artifacts["implementation_plan_md"] = str(Path(args.implementation_plan_artifact).resolve())
-    if args.result_artifact:
-        artifacts["result_md"] = str(Path(args.result_artifact).resolve())
-    worker = existing.get("worker", {}).copy() if isinstance(existing.get("worker"), dict) else {}
-    if args.worker_status:
-        worker["status"] = args.worker_status
-        worker["updated"] = now_iso()
-    if args.worker_note:
-        worker["note"] = args.worker_note
-        worker.setdefault("updated", now_iso())
-    model_check = existing.get("model_check")
-    if args.model_check:
-        model_check = json.loads(args.model_check)
-    monitoring = existing.get("monitoring")
-    if args.monitoring:
-        monitoring = json.loads(args.monitoring)
-    embedded_session = existing.get("embedded_session")
-    if args.embedded_session:
-        embedded_session = json.loads(args.embedded_session)
-    payload = {
-        "schema_version": "v1",
-        "epic_key": args.epic_key,
-        "group_id": args.group_id,
-        "handoff_path": str(Path(args.handoff_path).resolve()),
-        "packet_id": args.packet_id,
-        "branch_name": args.branch_name,
-        "harness": args.harness,
-        "runtime_mode": args.runtime_mode,
-        "model": args.model,
-        "model_check": model_check,
-        "status": args.status,
-        "phase": phase,
-        "completion_state": completion_state,
-        "runtime": {
-            "server_url": args.server_url,
-            "session_id": args.session_id,
-            "tmux_session": args.tmux_session,
-            "server_tmux_session": args.server_tmux_session,
-            "session_dir": args.session_dir,
-        },
-        "time": {
-            "created": created,
-            "updated": now_iso(),
-        },
-        "last_action": args.last_action,
-        "attach_instructions": args.attach,
-        "artifacts": artifacts,
-        "worker": worker,
-        "monitoring": monitoring,
-        "embedded_session": embedded_session,
-    }
-    if args.harness == "opencode":
-        payload["opencode"] = {
-            "server_url": args.server_url,
-            "session_id": args.session_id,
-            "tmux_session": args.tmux_session,
-            "server_tmux_session": args.server_tmux_session,
-        }
+    updated = now_iso()
+    payload = merge_run_metadata(
+        existing=existing,
+        epic_key=args.epic_key,
+        group_id=args.group_id,
+        handoff_path=args.handoff_path,
+        packet_id=args.packet_id,
+        branch_name=args.branch_name,
+        runtime_mode=args.runtime_mode,
+        harness=args.harness,
+        model=args.model,
+        status=args.status,
+        phase=phase,
+        completion_state=completion_state,
+        server_url=args.server_url,
+        session_id=args.session_id,
+        tmux_session=args.tmux_session,
+        server_tmux_session=args.server_tmux_session,
+        session_dir=args.session_dir,
+        last_action=args.last_action,
+        attach_instructions=args.attach,
+        plan_artifact=args.plan_artifact,
+        implementation_plan_artifact=args.implementation_plan_artifact,
+        result_artifact=args.result_artifact,
+        worker_status=args.worker_status,
+        worker_note=args.worker_note,
+        model_check=decode_json_arg(args.model_check, existing.get("model_check")),
+        monitoring=decode_json_arg(args.monitoring, existing.get("monitoring")),
+        embedded_session=decode_json_arg(args.embedded_session, existing.get("embedded_session")),
+        created_at=created,
+        updated_at=updated,
+    )
     write_json(path, payload)
     emit_json(payload)
 

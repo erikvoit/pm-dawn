@@ -5,7 +5,7 @@ import argparse
 from pathlib import Path
 
 from common import emit_json, repo_root, write_json
-from pm_dawn_core.implement import compile_packet_handoff
+from pm_dawn_core.plan import compile_packet_handoff
 
 
 def parse_args() -> argparse.Namespace:
